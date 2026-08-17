@@ -1,0 +1,560 @@
+================================================================================
+  cashlog.id — PANDUAN IMPLEMENTASI & VERIFIKASI
+================================================================================
+
+Dokumen ini menjelaskan setup end-to-end dari nol: akun eksternal, env,
+database, deploy, dan checklist uji.
+
+Stack:
+  ct-frontend  → Next.js (landing, dashboard, onboarding, settings)
+  ct-backend   → Fastify + Baileys (WA) + Google Sheets API
+  Supabase     → Auth (email/password + Google OAuth) + profil langganan
+  MySQL        → WA session, kategori, budget, Google refresh token
+  Google Cloud → OAuth Sheets/Drive (terpisah dari login Supabase)
+  Midtrans     → Snap checkout + Subscription API (opsional di dev)
+  Resend       → Email welcome & konfirmasi langganan (opsional)
+
+
+================================================================================
+RINGKASAN: APA YANG PERLU DISIAPKAN
+================================================================================
+
+  WAJIB (MVP nyata):
+    [ ] Node.js 20+ + npm install
+    [ ] Supabase project + jalankan schema.sql
+    [ ] MySQL 8+ + jalankan schema.sql
+    [ ] Google Cloud (Sheets + Drive API + OAuth client)
+    [ ] ct-backend/.env + ct-frontend/.env.local
+    [ ] Backend & frontend running
+
+  OPSIONAL (dev lokal tanpa bayar):
+    [ ] Midtrans kosong → checkout dev mode auto-aktifkan langganan
+    [ ] Resend kosong → email di-skip (app tetap jalan)
+    [ ] OpenAI/Gemini kosong → parser rule-based tetap jalan
+
+  UNTUK LAUNCH BERBAYAR:
+    [ ] Akun Midtrans (sandbox dulu, lalu production)
+    [ ] Webhook HTTPS publik ke backend
+    [ ] Backend always-on (WA bot + reminder 21:00 WIB)
+    [ ] Resend + verifikasi domain email
+
+
+================================================================================
+0. DEMO MODE — PREVIEW TANPA CONFIG (PALING CEPAT)
+================================================================================
+
+  cp ct-frontend/.env.demo.example ct-frontend/.env.local
+  npm install
+  npm run dev:frontend
+
+  Buka http://localhost:3000
+
+  Journey:
+    /           → Landing + pricing + footer (Privasi/Syarat)
+    /register   → Daftar demo
+    /dashboard  → Onboarding checklist
+    /onboarding → WA pairing mock (kode DEMO-CODE)
+    /settings   → Sidebar nav, kategori, budget, anggota keluarga (mock)
+    /join/h/... → Halaman pairing anggota keluarga (mock, localStorage)
+
+  Tidak perlu: Supabase, MySQL, backend, Google, WhatsApp, Midtrans.
+
+
+================================================================================
+1. PRASYARAT
+================================================================================
+
+  [ ] Node.js 20+
+  [ ] MySQL 8+ (local atau managed)
+  [ ] Akun Supabase (free tier cukup)
+  [ ] Google Cloud project
+  [ ] Nomor WhatsApp aktif (untuk pairing nyata)
+  [ ] (Opsional) OpenAI atau Gemini API key
+  [ ] (Nanti) Akun Midtrans + Resend
+
+
+================================================================================
+2. CLONE & INSTALL
+================================================================================
+
+  cd cashlog.id
+  npm install
+  npm run build          # harus lulus tanpa error TypeScript
+
+
+================================================================================
+3. DATABASE — SETUP DARI NOL (SATU FILE PER DB)
+================================================================================
+
+  Tidak ada migration terpisah. Satu file per DB (drop + create ulang):
+
+  ── 3.1 Supabase (PostgreSQL) ─────────────────────────────────────────────
+
+    1. Buat project baru di https://supabase.com
+    2. SQL Editor → paste & run SELURUH isi:
+
+         ct-frontend/supabase/schema.sql
+
+    3. Verifikasi tabel: profiles, google_connections, whatsapp_sessions
+    4. Trigger on_auth_user_created: user baru → trial Pro 7 hari
+
+    Catatan: file ini drop & recreate tabel public.* — hanya untuk setup baru.
+
+  ── 3.2 MySQL ─────────────────────────────────────────────────────────────
+
+    mysql -u root -p < ct-backend/database/schema.sql
+
+    (DROP DATABASE cashlog lalu create ulang — hanya untuk setup baru)
+
+    Verifikasi tabel:
+      households, household_members,
+      wa_sessions, wa_auth_keys, user_config, categories,
+      budgets, google_connections
+
+    Catatan schema:
+      - wa_sessions PK = member_id (bukan user_id)
+      - Lead user: member_id sama dengan Supabase user id
+      - Data household hanya di MySQL, tidak di Supabase
+
+
+================================================================================
+4. SUPABASE AUTH
+================================================================================
+
+  4.1 Enable providers (Authentication → Providers):
+        - Email          → ON (untuk register/login password)
+        - Google         → ON (Client ID/Secret dari Google Cloud)
+
+  4.2 Redirect URLs (Authentication → URL Configuration):
+        Site URL:       http://localhost:3000
+        Redirect URLs:  http://localhost:3000/auth/callback
+
+  4.3 Catat credentials (Project Settings → API):
+        SUPABASE_URL                  → backend + frontend
+        anon public key               → NEXT_PUBLIC_SUPABASE_ANON_KEY
+        service_role key              → SUPABASE_SERVICE_ROLE_KEY (backend only)
+
+
+================================================================================
+5. GOOGLE CLOUD (SATU OAuth CLIENT — WAJIB SAMA)
+================================================================================
+
+  Google login + izin Sheets/Drive memakai SATU OAuth client Google Cloud
+  (Client ID/Secret yang sama di Supabase DAN ct-backend/.env).
+
+  Alur user:
+    • Daftar/Masuk dengan Google → 1 consent (auth + Sheets scope)
+      → refresh token disimpan via /api/sheets/connect-token
+      → Sheet dibuat otomatis saat onboarding (bukan saat login)
+    • Daftar email → saat onboarding: OAuth Sheets fallback (1 klik Google)
+
+  5.1 Enable APIs:
+        - Google Sheets API
+        - Google Drive API
+
+  5.2 OAuth client "Web application" (SATU client untuk semua):
+
+    Authorized redirect URIs (tambahkan keduanya):
+        http://localhost:3001/api/sheets/oauth/callback
+        https://<project-ref>.supabase.co/auth/v1/callback
+
+    → GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET di ct-backend/.env
+    → Supabase → Authentication → Providers → Google:
+        isi Client ID/Secret YANG SAMA
+        (Supabase otomatis minta scope tambahan dari frontend saat login)
+
+  5.3 Testing mode: tambahkan email Anda sebagai Test User di consent screen.
+
+  Catatan: refresh token dari Supabase Google login hanya valid di backend
+  jika Client ID/Secret identik dengan GOOGLE_CLIENT_ID di backend.
+
+
+================================================================================
+6. ENVIRONMENT VARIABLES
+================================================================================
+
+  ── 6.1 Backend ───────────────────────────────────────────────────────────
+
+    cp ct-backend/.env.example ct-backend/.env
+
+    WAJIB:
+      SUPABASE_URL=
+      SUPABASE_SERVICE_ROLE_KEY=
+      MYSQL_HOST=127.0.0.1
+      MYSQL_PORT=3306
+      MYSQL_USER=root
+      MYSQL_PASSWORD=
+      MYSQL_DATABASE=cashlog
+      GOOGLE_CLIENT_ID=
+      GOOGLE_CLIENT_SECRET=
+      GOOGLE_REDIRECT_URI=http://localhost:3001/api/sheets/oauth/callback
+      OAUTH_STATE_SECRET=<random string panjang, min 32 char>
+      FRONTEND_URL=http://localhost:3000
+      CORS_ORIGIN=http://localhost:3000
+
+    Langganan & harga:
+      BASIC_PRICE=29000
+      PRO_PRICE=49000
+      HOUSEHOLD_MEMBER_PRICE=5000
+      MAX_HOUSEHOLD_MEMBER_SLOTS=5
+      TRIAL_DAYS=7
+      SUBSCRIPTION_PERIOD_DAYS=30
+
+    Midtrans (kosongkan untuk dev bypass):
+      MIDTRANS_SERVER_KEY=
+      MIDTRANS_IS_PRODUCTION=false
+      MIDTRANS_CHECKOUT_MODE=snap    # snap | recurring
+
+    Email Resend (opsional):
+      RESEND_API_KEY=re_...
+      EMAIL_FROM=cashlog.id <noreply@cashlog.id>
+
+    LLM parser (opsional):
+      PARSER_MODE=hybrid
+      LLM_PROVIDER=openai
+      OPENAI_API_KEY=sk-...
+
+    Test user (dev only):
+      TEST_USER_EMAIL=test@cashlog.id
+      TEST_USER_PASSWORD=test123456
+
+    Template staging: ct-backend/.env.uat.example
+
+  ── 6.2 Frontend ──────────────────────────────────────────────────────────
+
+    cp ct-frontend/.env.example ct-frontend/.env.local
+
+    WAJIB:
+      NEXT_PUBLIC_SUPABASE_URL=
+      NEXT_PUBLIC_SUPABASE_ANON_KEY=
+      NEXT_PUBLIC_APP_URL=http://localhost:3000
+      NEXT_PUBLIC_API_URL=http://localhost:3001
+
+    Dev helpers:
+      NEXT_PUBLIC_ENABLE_TEST_LOGIN=true
+      NEXT_PUBLIC_BASIC_PRICE=29000
+      NEXT_PUBLIC_PRO_PRICE=49000
+      NEXT_PUBLIC_HOUSEHOLD_MEMBER_PRICE=5000
+      NEXT_PUBLIC_MAX_HOUSEHOLD_MEMBER_SLOTS=5
+      NEXT_PUBLIC_TRIAL_DAYS=7
+
+    Template demo:  ct-frontend/.env.demo.example
+    Template UAT:   ct-frontend/.env.uat.example
+
+
+================================================================================
+7. LAYANAN EKSTERNAL (PASANG SAAT SIAP)
+================================================================================
+
+  ── 7.1 Midtrans — langganan berbayar ─────────────────────────────────────
+
+    Daftar: https://midtrans.com
+    Docs:   https://docs.midtrans.com/docs/snap-snap-integration-guide
+
+    Env backend:
+      MIDTRANS_SERVER_KEY=SB-Mid-server-...   # sandbox Server Key
+      MIDTRANS_IS_PRODUCTION=false
+      MIDTRANS_CHECKOUT_MODE=snap             # snap | recurring
+
+    Webhook URLs (MAP Dashboard → Settings → Configuration):
+      Payment Notification URL:
+        https://<API_HOST>/api/webhooks/midtrans
+      Recurring Notification URL (jika mode recurring):
+        https://<API_HOST>/api/webhooks/midtrans/recurring
+
+    Redirect URLs (Finish / Error / Pending):
+      https://cashlog.id/settings?payment=...
+
+    Flow user:
+      Settings / subscription-expired → Pilih Basic/Pro
+      → Redirect ke halaman Snap Midtrans (VA, QRIS, kartu, GoPay, dll.)
+      → HTTP notification settlement/capture → langganan aktif +30 hari
+
+    Mode recurring (MIDTRANS_CHECKOUT_MODE=recurring):
+      Snap UI khusus recurring → saved token → Subscription API
+      → charge otomatis tiap bulan (kartu kredit / GoPay token)
+
+    Tanpa Midtrans + NODE_ENV=development:
+      Checkout langsung aktifkan langganan (dev bypass).
+
+    Cancel auto-renewal: Settings → "Batalkan perpanjangan otomatis"
+
+  ── 7.2 Resend — email transaksional ──────────────────────────────────────
+
+    Daftar: https://resend.com
+    Verifikasi domain cashlog.id → buat API key
+
+    Env backend:
+      RESEND_API_KEY=re_...
+      EMAIL_FROM=cashlog.id <noreply@cashlog.id>
+
+    Email yang dikirim:
+      - Welcome (setelah register / OAuth pertama kali)
+      - Langganan aktif (setelah pembayaran sukses)
+
+    Tanpa Resend: email di-skip, log "[email] Skipped" — app normal.
+
+
+================================================================================
+8. MENJALANKAN APLIKASI
+================================================================================
+
+  Terminal 1 — Backend:
+    npm run dev:backend
+    → "ct-backend running at http://0.0.0.0:3001"
+
+  Terminal 2 — Frontend:
+    npm run dev:frontend
+    → http://localhost:3000
+
+  Atau: npm run dev:all
+
+  Test user (opsional):
+    npm run seed:test-user --workspace=ct-backend
+    → login di /login dengan test@cashlog.id / test123456
+
+
+================================================================================
+9. CHECKLIST VERIFIKASI E2E
+================================================================================
+
+  ── STEP 1: Health ────────────────────────────────────────────────────────
+    curl http://localhost:3001/api/health
+
+  ── STEP 2: Landing ───────────────────────────────────────────────────────
+    [ ] http://localhost:3000 — pricing Basic Rp 29k / Pro Rp 49k
+    [ ] Footer: /privacy, /terms
+    [ ] /register — form daftar + link syarat/privasi
+
+  ── STEP 3: Auth ──────────────────────────────────────────────────────────
+    [ ] Register email/password → onboarding
+    [ ] ATAU login Google → dashboard
+    [ ] Trial Pro 7 hari (cek di Supabase profiles)
+
+  ── STEP 4: Google Sheet ──────────────────────────────────────────────────
+    [ ] Dashboard → Hubungkan Google Sheet
+    [ ] OAuth approve → Sheet baru (tab Summary + tahun)
+    [ ] Settings → status Terhubung
+
+  ── STEP 5: WhatsApp pairing ────────────────────────────────────────────────
+    [ ] /onboarding → input nomor → pairing code
+    [ ] HP: WhatsApp → Tautkan perangkat → masukkan kode
+    [ ] Status Terhubung; restart backend → tetap connected
+
+  ── STEP 6: Catat transaksi (flow utama) ──────────────────────────────────
+    Kirim ke CHAT DIRI SENDIRI (nomor yang sama):
+
+    [ ] "Beli kopi 20rb" → bot balas konfirmasi
+    [ ] Baris baru di Google Sheet
+    [ ] Dashboard → transaksi terbaru
+
+    Perintah bot:
+      bantuan | hari ini | ringkasan | terakhir
+
+    Pro only:
+      [ ] Kirim foto struk → multi-item → beberapa baris Sheet
+
+  ── STEP 7: Dashboard & analitik ──────────────────────────────────────────
+    [ ] Ringkasan bulan ini + kategori
+    [ ] /dashboard/analytics — Pro/trial (Basic → upgrade prompt)
+
+  ── STEP 8: Settings ──────────────────────────────────────────────────────
+    [ ] Sidebar kiri → scroll ke section (Langganan, Sheet, WA, Keluarga, …)
+    [ ] Edit keyword kategori (semua tier)
+    [ ] Tambah/hapus kategori custom (Pro only)
+    [ ] Budget editor
+    [ ] Langganan: tombol Basic/Pro
+
+  ── STEP 9: Anggota keluarga (Pro add-on) ───────────────────────────────────
+    [ ] Settings → Anggota Keluarga → "Tambah anggota keluarga"
+    [ ] Beli slot (dev: auto-aktif; prod: Midtrans Snap)
+    [ ] Tambah anggota → pairing inline di halaman yang sama
+    [ ] Atau kirim link /join/h/<token> → anggota pairing di HP sendiri
+    [ ] Transaksi anggota masuk Sheet lead, kolom "pencatat" terisi nama
+
+  ── STEP 10: Subscription gate ─────────────────────────────────────────────
+    Test expired (Supabase SQL Editor):
+      UPDATE profiles SET subscription_status = 'expired',
+        subscription_tier = null
+      WHERE email = 'your@email.com';
+
+    [ ] Redirect ke /subscription-expired
+    [ ] Tombol subscribe Basic/Pro
+
+    Kembalikan trial:
+      UPDATE profiles SET subscription_status = 'trial',
+        subscription_tier = 'pro',
+        subscription_expires_at = now() + interval '7 days'
+      WHERE email = 'your@email.com';
+
+
+================================================================================
+10. API REFERENCE
+================================================================================
+
+  Header (kecuali health & webhook):
+    Authorization: Bearer <supabase_access_token>
+
+  Public:
+    GET   /api/health
+    POST  /api/webhooks/midtrans
+    POST  /api/webhooks/midtrans/recurring
+    GET   /api/sheets/oauth/callback
+
+  Auth only (langganan expired OK):
+    GET   /api/subscription/status
+    POST  /api/subscription/checkout       body: { "tier": "basic"|"pro" }
+    POST  /api/subscription/cancel-renewal
+    POST  /api/auth/welcome-email
+
+  Auth + langganan aktif:
+    POST  /api/whatsapp/pairing/start      body: { "phone": "62812..." }
+    GET   /api/whatsapp/status
+    DELETE /api/whatsapp/pairing
+    GET   /api/sheets/oauth/url
+    GET   /api/sheets/status
+    GET   /api/dashboard
+    GET   /api/dashboard/analytics
+    GET   /api/categories
+    POST  /api/categories                  Pro only
+    PATCH /api/categories/:id
+    DELETE /api/categories/:id             Pro only
+    GET   /api/budgets
+    PUT   /api/budgets
+    GET   /api/household
+    POST  /api/household/members/invite    body: { "displayName": "Istri" }
+    DELETE /api/household/members/:id
+    POST  /api/household/slots/checkout    body: { "slots": 2 }  ← total slot
+    POST  /api/household/members/:id/pairing/start
+    GET   /api/household/members/:id/pairing/status
+    DELETE /api/household/members/:id/pairing
+
+  Public (join anggota — tanpa login):
+    GET   /api/household/join/:token
+    POST  /api/household/join/:token/pairing/start
+    GET   /api/household/join/:token/pairing/status
+    DELETE /api/household/join/:token/pairing
+
+
+================================================================================
+11. DEPLOY PRODUCTION (CHECKLIST)
+================================================================================
+
+  Frontend (Vercel/similar):
+    [ ] NEXT_PUBLIC_* env production
+    [ ] NEXT_PUBLIC_ENABLE_TEST_LOGIN=false
+    [ ] NEXT_PUBLIC_DEMO_MODE=false
+    [ ] Supabase redirect URL = https://cashlog.id/auth/callback
+
+  Backend (VPS/Railway/Fly.io — HARUS always-on untuk WA):
+    [ ] NODE_ENV=production
+    [ ] OAUTH_STATE_SECRET set (min 32 karakter random)
+    [ ] FRONTEND_URL + CORS_ORIGIN = https://cashlog.id
+    [ ] TRUST_PROXY=true (VPS di belakang Nginx/Caddy — rate limit IP benar)
+    [ ] HTTPS api.cashlog.id (Let's Encrypt / reverse proxy)
+    [ ] GOOGLE_REDIRECT_URI = https://api.cashlog.id/api/sheets/oauth/callback
+    [ ] MySQL accessible
+    [ ] Midtrans webhook URLs → HTTPS backend
+    [ ] Resend domain verified
+
+  Keamanan API (sudah built-in di backend):
+    [ ] Auth: Bearer Supabase JWT di semua endpoint sensitif
+    [ ] Rate limit: 100 req/menit/IP (default); join link 20/menit
+    [ ] Security headers: Helmet (X-Content-Type-Options, dll.)
+    [ ] Startup gagal jika production + CORS/FRONTEND masih localhost
+    [ ] Webhook Midtrans: verifikasi signature_key (SHA512)
+
+  Supabase + MySQL:
+    [ ] schema.sql sudah di-run di environment production
+
+
+================================================================================
+12. TROUBLESHOOTING
+================================================================================
+
+  MySQL connection refused
+    → MySQL running, cek MYSQL_* di .env
+
+  Login Google loop
+    → Redirect URL Supabase = .../auth/callback
+    → NEXT_PUBLIC_APP_URL benar
+
+  API 401
+    → User login, NEXT_PUBLIC_API_URL benar
+    → Authorization: Bearer <supabase_access_token> wajib di request
+
+  API 429 RATE_LIMITED
+    → Terlalu banyak request dari IP yang sama; tunggu Retry-After
+    → Pastikan TRUST_PROXY=true jika di belakang reverse proxy
+
+  API 403 SUBSCRIPTION_EXPIRED
+    → Normal jika trial habis; bayar atau reset di Supabase
+
+  WA tidak balas
+    → Kirim ke chat DIRI SENDIRI
+    → Sheet + WA harus terhubung
+    → Backend running
+
+  Midtrans checkout gagal
+    → Cek MIDTRANS_SERVER_KEY (Server Key, bukan Client Key)
+    → Sandbox vs production (MIDTRANS_IS_PRODUCTION)
+
+  Slot anggota keluarga tidak aktif setelah bayar
+    → Webhook payment notification diterima?
+    → custom_field3 = slots di notification body
+    → Dev bypass: kosongkan MIDTRANS + NODE_ENV=development
+
+  Webhook tidak masuk
+    → Backend harus HTTPS publik (bukan localhost)
+    → Verifikasi signature_key SHA512
+    → URL webhook benar di MAP Dashboard Midtrans
+
+  Email tidak terkirim
+    → RESEND_API_KEY + EMAIL_FROM
+    → Domain verified di Resend
+
+
+================================================================================
+13. DEFINISI MVP SELESAI
+================================================================================
+
+  Core (code siap — verifikasi E2E di section 9):
+  [x] Register/login + trial Pro 7 hari
+  [x] Google Sheet terhubung + transaksi tersimpan di Sheet user
+  [x] WA pairing + catat via self-chat + perintah bot + reminder 21:00 WIB
+  [x] Dashboard ringkasan + analitik (Pro/trial)
+  [x] Kategori custom + budget bulanan (Pro)
+  [x] Tier Basic/Pro + halaman subscription-expired
+  [x] Anggota keluarga (Pro add-on, shared Sheet, kolom pencatat)
+  [x] Privacy & Terms
+  [x] Demo mode (frontend-only preview)
+  [x] npm run build lulus (frontend + backend TypeScript)
+
+  Belum wajib untuk MVP lokal / staging:
+  [ ] Payment live (butuh akun Midtrans + webhook HTTPS)
+  [ ] Email live (butuh Resend — opsional)
+  [ ] Automated tests (belum ada test suite)
+
+  Catatan deploy:
+  [ ] MySQL HARUS fresh install schema.sql (wa_sessions pakai member_id)
+  [ ] Backend always-on (WA bot + scheduler reminder/laporan)
+
+
+================================================================================
+14. FILE PENTING
+================================================================================
+
+  ct-frontend/supabase/schema.sql     → DB Supabase (fresh install)
+  ct-backend/database/schema.sql      → DB MySQL (fresh install)
+  ct-backend/.env.example             → template env backend local
+  ct-backend/.env.uat.example         → template env backend staging
+  ct-frontend/.env.example            → template env frontend local
+  ct-frontend/.env.demo.example       → demo mode
+  ct-frontend/.env.uat.example        → staging frontend
+  LOCAL_VERIFY_GUIDE.txt              → dokumen ini
+
+
+================================================================================
+  Last updated: Agustus 2026 (household + settings sidebar)
+  Project: cashlog.id (ct-frontend + ct-backend)
+================================================================================

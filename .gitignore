@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Env / secrets — keep *.example tracked
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+ct-backend/.env
+ct-frontend/.env.local
+
+# Build / cache
+.next/
+out/
+dist/
+build/
+coverage/
+.turbo/
+*.tsbuildinfo
+
+# Logs & debug
+logs/
+*.log
+npm-debug.log*
+.dbg/
+debug-*.md
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Vercel
+.vercel

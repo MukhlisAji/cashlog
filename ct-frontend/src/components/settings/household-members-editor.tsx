@@ -1,0 +1,382 @@
+"use client";
+
+import { useState } from "react";
+import {
+  ChevronUp,
+  Loader2,
+  Trash2,
+  UserPlus,
+  Users,
+} from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useHousehold } from "@/hooks/use-household";
+import { useSubscription } from "@/hooks/use-subscription";
+import {
+  formatHouseholdMemberPrice,
+  HOUSEHOLD_MEMBER_PRICE,
+  MAX_HOUSEHOLD_MEMBER_SLOTS,
+} from "@/lib/pricing";
+import { householdService } from "@/services/household.service";
+
+function formatRupiah(amount: number): string {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+export function HouseholdMembersEditor() {
+  const { isPro, isTrial, canManageHousehold } = useSubscription();
+  const { household, isLoading, refresh } = useHousehold();
+  const [displayName, setDisplayName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [addSlotsInput, setAddSlotsInput] = useState("1");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmPurchase, setConfirmPurchase] = useState(false);
+  const [confirmSlotTarget, setConfirmSlotTarget] = useState<number | null>(null);
+  const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
+  const [confirmRevokeName, setConfirmRevokeName] = useState("");
+  const [showAddPanel, setShowAddPanel] = useState(false);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" />
+        Memuat...
+      </div>
+    );
+  }
+
+  if (!canManageHousehold && !isTrial && !isPro) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Fitur anggota keluarga hanya tersedia di paket Pro. Upgrade langganan
+        untuk menambahkan istri/anak ke sheet yang sama.
+      </p>
+    );
+  }
+
+  const addCount = Number(addSlotsInput);
+  const slotsPaid = household?.memberSlotsPaid ?? 0;
+  const activeCount = household?.activeMemberCount ?? 0;
+  const newTotalSlots = slotsPaid + addCount;
+  const maxAdd = MAX_HOUSEHOLD_MEMBER_SLOTS - slotsPaid;
+  const canAddSlots =
+    Number.isInteger(addCount) &&
+    addCount >= 1 &&
+    newTotalSlots <= MAX_HOUSEHOLD_MEMBER_SLOTS;
+  const monthlyTotal = newTotalSlots * HOUSEHOLD_MEMBER_PRICE;
+
+  async function executePurchaseSlots(targetTotal: number) {
+    if (!Number.isInteger(targetTotal) || targetTotal < 0 || targetTotal > MAX_HOUSEHOLD_MEMBER_SLOTS) {
+      setError(`Total slot harus 0–${MAX_HOUSEHOLD_MEMBER_SLOTS}.`);
+      setConfirmPurchase(false);
+      setConfirmSlotTarget(null);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setMessage(null);
+
+    const result = await householdService.checkoutSlots(targetTotal);
+    setLoading(false);
+    setConfirmPurchase(false);
+    setConfirmSlotTarget(null);
+
+    if (!result.success) {
+      setError(result.error ?? "Gagal membeli slot.");
+      return;
+    }
+
+    if (result.data?.checkoutUrl) {
+      window.location.href = result.data.checkoutUrl;
+      return;
+    }
+
+    if (targetTotal === 0) {
+      setMessage("Slot anggota dinonaktifkan.");
+    } else if (targetTotal > slotsPaid) {
+      setMessage(
+        `${targetTotal - slotsPaid} slot ditambahkan — total ${targetTotal} slot aktif.`,
+      );
+    } else {
+      setMessage(`Total slot disesuaikan menjadi ${targetTotal}.`);
+    }
+    setAddSlotsInput("1");
+    await refresh();
+  }
+
+  function openAddSlotsConfirm() {
+    if (!canAddSlots) {
+      setError(
+        maxAdd <= 0
+          ? `Sudah maksimal ${MAX_HOUSEHOLD_MEMBER_SLOTS} slot.`
+          : `Masukkan 1–${maxAdd} slot tambahan.`,
+      );
+      return;
+    }
+    setError(null);
+    setConfirmSlotTarget(newTotalSlots);
+    setConfirmPurchase(true);
+  }
+
+  async function handleAdd() {
+    if (!displayName.trim() || !phone.trim()) return;
+
+    setLoading(true);
+    setError(null);
+    setMessage(null);
+
+    const result = await householdService.addMember(displayName.trim(), phone.trim());
+    setLoading(false);
+
+    if (!result.success) {
+      setError(result.error ?? "Gagal menambahkan anggota.");
+      return;
+    }
+
+    setDisplayName("");
+    setPhone("");
+    setMessage(`${result.data?.displayName ?? "Anggota"} di-whitelist — chat ke bot akan masuk sheet yang sama.`);
+    await refresh();
+  }
+
+  async function executeRevoke(memberId: string) {
+    setLoading(true);
+    setError(null);
+
+    const result = await householdService.revokeMember(memberId);
+    setLoading(false);
+    setConfirmRevokeId(null);
+    setConfirmRevokeName("");
+
+    if (!result.success) {
+      setError(result.error ?? "Gagal mencabut anggota.");
+      return;
+    }
+
+    setMessage("Anggota dicabut dari whitelist.");
+    await refresh();
+  }
+
+  const hasMembers = (household?.members.length ?? 0) > 0;
+  const slotConfirmTarget = confirmSlotTarget ?? 0;
+  const isReducingSlots =
+    slotConfirmTarget < slotsPaid && slotConfirmTarget > 0;
+  const isDeactivatingSlots = slotConfirmTarget === 0;
+  const addedSlots = slotConfirmTarget - slotsPaid;
+
+  return (
+    <>
+      <div className="flex flex-col gap-5">
+        {!showAddPanel ? (
+          <div className="flex flex-col gap-2">
+            {hasMembers && (
+              <p className="text-sm text-muted-foreground">
+                {activeCount} anggota · {slotsPaid} slot aktif
+              </p>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-fit"
+              onClick={() => setShowAddPanel(true)}
+            >
+              <UserPlus className="size-4" />
+              Tambah anggota keluarga
+            </Button>
+          </div>
+        ) : (
+          <>
+            <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 font-medium">
+                  <Users className="size-4" />
+                  Slot anggota keluarga (add-on)
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-muted-foreground"
+                  onClick={() => setShowAddPanel(false)}
+                >
+                  <ChevronUp className="size-4" />
+                  Tutup
+                </Button>
+              </div>
+              <p className="mt-2 text-muted-foreground">
+                {formatHouseholdMemberPrice()}/bulan per anggota (maks{" "}
+                {MAX_HOUSEHOLD_MEMBER_SLOTS}). Daftarkan nomor WA mereka — semua
+                transaksi masuk ke Sheet yang sama.
+              </p>
+              <p className="mt-2">
+                Slot aktif:{" "}
+                <span className="font-medium">{slotsPaid}</span> · Terpakai:{" "}
+                <span className="font-medium">{activeCount}</span>
+              </p>
+
+              <div className="mt-3 flex flex-wrap items-end gap-2">
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="add-slots" className="text-xs">
+                    Tambah berapa slot?
+                  </Label>
+                  <Input
+                    id="add-slots"
+                    type="number"
+                    min={1}
+                    max={Math.max(1, maxAdd)}
+                    value={addSlotsInput}
+                    onChange={(e) => setAddSlotsInput(e.target.value)}
+                    className="w-24"
+                    disabled={maxAdd <= 0}
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={loading || !canAddSlots}
+                  onClick={openAddSlotsConfirm}
+                >
+                  {loading ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    `Tambah ${canAddSlots ? addCount : ""} slot`
+                  )}
+                </Button>
+              </div>
+              {canAddSlots && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {slotsPaid} slot sekarang + {addCount} ={" "}
+                  <span className="font-medium text-foreground">
+                    {newTotalSlots} slot total
+                  </span>{" "}
+                  ({formatRupiah(monthlyTotal)}/bulan)
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label>Whitelist nomor anggota</Label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  placeholder="Nama (contoh: Istri)"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  disabled={loading || !household?.canInviteMember}
+                />
+                <Input
+                  placeholder="08xxxxxxxxxx"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  disabled={loading || !household?.canInviteMember}
+                />
+                <Button
+                  disabled={
+                    loading ||
+                    !household?.canInviteMember ||
+                    !displayName.trim() ||
+                    !phone.trim()
+                  }
+                  onClick={() => void handleAdd()}
+                >
+                  <UserPlus className="size-4" />
+                  Daftarkan
+                </Button>
+              </div>
+              {!household?.canInviteMember && slotsPaid === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Beli slot anggota dulu sebelum menambahkan.
+                </p>
+              )}
+            </div>
+          </>
+        )}
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        {message && <p className="text-sm text-muted-foreground">{message}</p>}
+
+        {hasMembers && (
+          <ul className="divide-y rounded-lg border">
+            {household?.members.map((member) => (
+              <li key={member.id} className="flex items-center justify-between gap-3 px-3 py-3 text-sm">
+                <div>
+                  <p className="font-medium">{member.displayName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {member.phone ? `+${member.phone}` : "Nomor belum diisi"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">Terdaftar</Badge>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={loading}
+                    onClick={() => {
+                      setConfirmRevokeId(member.id);
+                      setConfirmRevokeName(member.displayName);
+                    }}
+                  >
+                    <Trash2 className="size-4 text-destructive" />
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <ConfirmDialog
+        open={confirmPurchase}
+        title={
+          isDeactivatingSlots
+            ? "Nonaktifkan slot anggota?"
+            : isReducingSlots
+              ? "Kurangi slot anggota?"
+              : "Konfirmasi tambah slot"
+        }
+        description={
+          isDeactivatingSlots
+            ? "Slot anggota akan dinonaktifkan."
+            : isReducingSlots
+              ? `Slot akan diturunkan dari ${slotsPaid} ke ${slotConfirmTarget}.`
+              : `Tambah ${addedSlots} slot (${slotsPaid} → ${slotConfirmTarget} total). Tagihan: ${formatRupiah(slotConfirmTarget * HOUSEHOLD_MEMBER_PRICE)}.`
+        }
+        confirmLabel={isDeactivatingSlots ? "Nonaktifkan" : "Bayar sekarang"}
+        loading={loading}
+        onCancel={() => {
+          setConfirmPurchase(false);
+          setConfirmSlotTarget(null);
+        }}
+        onConfirm={() => {
+          if (confirmSlotTarget !== null) {
+            void executePurchaseSlots(confirmSlotTarget);
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!confirmRevokeId}
+        title="Cabut anggota?"
+        description={`${confirmRevokeName} tidak bisa lagi mencatat ke sheet keluarga.`}
+        confirmLabel="Ya, cabut"
+        loading={loading}
+        onCancel={() => {
+          setConfirmRevokeId(null);
+          setConfirmRevokeName("");
+        }}
+        onConfirm={() => {
+          if (confirmRevokeId) void executeRevoke(confirmRevokeId);
+        }}
+      />
+    </>
+  );
+}

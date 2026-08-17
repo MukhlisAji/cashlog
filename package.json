@@ -1,0 +1,21 @@
+{
+  "name": "cashlog",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "ct-frontend",
+    "ct-backend"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=ct-frontend",
+    "dev:frontend": "npm run dev --workspace=ct-frontend",
+    "dev:backend": "npm run dev --workspace=ct-backend",
+    "dev:all": "npm run dev:backend & npm run dev:frontend",
+    "build": "npm run build --workspaces --if-present",
+    "build:frontend": "npm run build --workspace=ct-frontend",
+    "build:backend": "npm run build --workspace=ct-backend",
+    "start:frontend": "npm run start --workspace=ct-frontend",
+    "start:backend": "npm run start --workspace=ct-backend",
+    "lint": "npm run lint --workspaces --if-present"
+  }
+}
