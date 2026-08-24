@@ -165,10 +165,6 @@ export default function SettingsPage() {
         `${window.location.pathname}${query ? `?${query}` : ""}`,
       );
       setInviteFamily(true);
-      showToast(
-        NOTICE_MESSAGES.sheet_connected.kind,
-        NOTICE_MESSAGES.sheet_connected.text,
-      );
       return;
     }
 
@@ -223,7 +219,7 @@ export default function SettingsPage() {
                   <CardTitle className="text-lg font-bold">Aktifkan Pencatatan WhatsApp</CardTitle>
                   <CardDescription>
                     Isi nomor WhatsApp, lalu tekan Simpan & Aktifkan.
-                    Google Sheet dibuat otomatis jika izin sudah diberikan saat login.
+                    Google Sheet dibuat saat aktivasi nomor (izin Google diminta di situ).
                   </CardDescription>
                 </div>
                 <Badge variant={sheetConnected ? "default" : "secondary"}>
@@ -249,8 +245,8 @@ export default function SettingsPage() {
                   onOnboarded={() => {
                     setInviteFamily(true);
                     showToast(
-                      NOTICE_MESSAGES.linked.kind,
-                      NOTICE_MESSAGES.linked.text,
+                      NOTICE_MESSAGES.whatsapp_connected.kind,
+                      NOTICE_MESSAGES.whatsapp_connected.text,
                     );
                   }}
                 />

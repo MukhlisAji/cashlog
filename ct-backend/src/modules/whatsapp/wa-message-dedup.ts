@@ -1,7 +1,8 @@
 import { getSupabaseAdmin } from "../../lib/supabase.js";
 
 const OUTBOUND_TTL_MS = 60_000;
-const PROCESSED_TTL_MS = 10 * 60_000;
+/** Meta retries the same wamid for hours; 10m was shorter than their retry gap. */
+const PROCESSED_TTL_MS = 24 * 60 * 60 * 1000;
 
 class WaMessageDedupMemory {
   private outbound = new Map<string, Set<string>>();
@@ -74,7 +75,28 @@ export async function claimInboundWaMessage(
   if (error?.code === "23505") return false;
   if (error) {
     console.error("[wa-dedup] persist failed", error.message);
+    // Local claim already held for PROCESSED_TTL_MS so Meta retries still skip.
     return true;
   }
   return true;
+}
+
+function jakartaHourBucket(now = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "0";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}`;
+}
+
+/** At most one "nomor belum terdaftar" reply per WA number per Jakarta hour. */
+export async function claimUnregisteredNotice(waId: string): Promise<boolean> {
+  const phone = waId.replace(/\D/g, "");
+  if (!phone) return false;
+  return claimInboundWaMessage(`unreg:${phone}:${jakartaHourBucket()}`);
 }

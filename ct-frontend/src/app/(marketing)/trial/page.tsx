@@ -28,6 +28,11 @@ export default function StartTrialPage() {
       return;
     }
 
+    if (result.code === "UNAUTHORIZED") {
+      router.replace(`${ROUTES.login}?redirect=${encodeURIComponent(ROUTES.trial)}`);
+      return;
+    }
+
     if (result.code === "TRIAL_ALREADY_USED") {
       router.replace(
         withNotice(ROUTES.subscriptionExpired, "trial_already_used"),

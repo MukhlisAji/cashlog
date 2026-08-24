@@ -4,7 +4,6 @@ import { Suspense, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/client";
-import { withNotice } from "@/lib/notice";
 import { authService } from "@/services/auth.service";
 import { sheetsService } from "@/services/sheets.service";
 
@@ -26,7 +25,7 @@ function ConnectSheetsInner() {
     void (async () => {
       const status = await sheetsService.getStatus();
       if (status.success && status.data?.connected) {
-        router.replace(withNotice(safePath, "sheet_connected"));
+        router.replace(safePath);
         return;
       }
       const supabase = createClient();

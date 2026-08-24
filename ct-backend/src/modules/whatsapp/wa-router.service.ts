@@ -29,6 +29,7 @@ import {
   parseWhatsAppLinkCode,
 } from "./wa-link-code.service.js";
 import { tryHandleWaCommand } from "./wa-command.service.js";
+import { claimUnregisteredNotice } from "./wa-message-dedup.js";
 
 const FAST_PATH_RE = /\b(bantuan|help|menu|\?|hari ini|ringkasan|terakhir)\b/i;
 const HAS_AMOUNT_HINT_RE = /\d/;
@@ -273,6 +274,9 @@ async function routeIncomingWhatsAppMessageInner(
 
   const ctx = await householdRepository.getActiveByPhone(msg.waId);
   if (!ctx) {
+    if (!(await claimUnregisteredNotice(msg.waId))) {
+      return;
+    }
     await meta.sendWhatsAppMessage(msg.waId, UNREGISTERED_REPLY);
     return;
   }

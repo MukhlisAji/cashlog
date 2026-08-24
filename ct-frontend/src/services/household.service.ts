@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import { getAccessToken } from "@/lib/access-token";
 import {
   demoDelay,
   getDemoHouseholdSummary,
@@ -22,14 +22,6 @@ interface ApiResponse<T> {
   data?: T;
   error?: string;
   message?: string;
-}
-
-async function getAccessToken(): Promise<string | null> {
-  const supabase = createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  return session?.access_token ?? null;
 }
 
 async function authFetch<T>(

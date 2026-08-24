@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import { getAccessToken } from "@/lib/access-token";
 import {
   createDemoCategory,
   deleteDemoCategory,
@@ -19,14 +19,6 @@ interface ApiResponse<T> {
   error?: string;
   code?: string;
   message?: string;
-}
-
-async function getAccessToken(): Promise<string | null> {
-  const supabase = createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  return session?.access_token ?? null;
 }
 
 export interface SubscriptionStatusData {
@@ -81,7 +73,9 @@ export const subscriptionService = {
     }
 
     const token = await getAccessToken();
-    if (!token) return { success: false, error: "Not authenticated" };
+    if (!token) {
+      return { success: false, error: "Not authenticated", code: "UNAUTHORIZED" };
+    }
 
     const response = await fetch(`${API_URL}/api/subscription/status`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -98,14 +92,24 @@ export const subscriptionService = {
     }
 
     const token = await getAccessToken();
-    if (!token) return { success: false, error: "Not authenticated" };
+    if (!token) {
+      return { success: false, error: "Not authenticated", code: "UNAUTHORIZED" };
+    }
 
     const response = await fetch(`${API_URL}/api/subscription/start-trial`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    return response.json() as Promise<ApiResponse<SubscriptionStatusData>>;
+    const body = (await response.json()) as ApiResponse<SubscriptionStatusData>;
+    if (response.status === 401) {
+      return {
+        success: false,
+        error: body.error ?? "Invalid token",
+        code: "UNAUTHORIZED",
+      };
+    }
+    return body;
   },
 
   async checkout(tier: SubscriptionTier) {
@@ -122,7 +126,9 @@ export const subscriptionService = {
     }
 
     const token = await getAccessToken();
-    if (!token) return { success: false, error: "Not authenticated" };
+    if (!token) {
+      return { success: false, error: "Not authenticated", code: "UNAUTHORIZED" };
+    }
 
     const response = await fetch(`${API_URL}/api/subscription/checkout`, {
       method: "POST",
@@ -174,7 +180,9 @@ export const subscriptionService = {
     }
 
     const token = await getAccessToken();
-    if (!token) return { success: false, error: "Not authenticated" };
+    if (!token) {
+      return { success: false, error: "Not authenticated", code: "UNAUTHORIZED" };
+    }
 
     const response = await fetch(`${API_URL}/api/subscription/confirm-payment`, {
       method: "POST",
@@ -196,7 +204,9 @@ export const subscriptionService = {
     }
 
     const token = await getAccessToken();
-    if (!token) return { success: false, error: "Not authenticated" };
+    if (!token) {
+      return { success: false, error: "Not authenticated", code: "UNAUTHORIZED" };
+    }
 
     const response = await fetch(`${API_URL}/api/subscription/cancel-renewal`, {
       method: "POST",
@@ -233,7 +243,9 @@ export const categoriesService = {
     }
 
     const token = await getAccessToken();
-    if (!token) return { success: false, error: "Not authenticated" };
+    if (!token) {
+      return { success: false, error: "Not authenticated", code: "UNAUTHORIZED" };
+    }
 
     const response = await fetch(`${API_URL}/api/categories`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -261,7 +273,9 @@ export const categoriesService = {
     }
 
     const token = await getAccessToken();
-    if (!token) return { success: false, error: "Not authenticated" };
+    if (!token) {
+      return { success: false, error: "Not authenticated", code: "UNAUTHORIZED" };
+    }
 
     const response = await fetch(`${API_URL}/api/categories`, {
       method: "POST",
@@ -291,7 +305,9 @@ export const categoriesService = {
     }
 
     const token = await getAccessToken();
-    if (!token) return { success: false, error: "Not authenticated" };
+    if (!token) {
+      return { success: false, error: "Not authenticated", code: "UNAUTHORIZED" };
+    }
 
     const response = await fetch(`${API_URL}/api/categories/${id}`, {
       method: "PATCH",
@@ -326,7 +342,9 @@ export const categoriesService = {
     }
 
     const token = await getAccessToken();
-    if (!token) return { success: false, error: "Not authenticated" };
+    if (!token) {
+      return { success: false, error: "Not authenticated", code: "UNAUTHORIZED" };
+    }
 
     const response = await fetch(`${API_URL}/api/categories/${id}`, {
       method: "DELETE",

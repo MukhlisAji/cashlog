@@ -18,7 +18,7 @@ export const NOTICE_MESSAGES: Record<
   },
   trial_started: {
     kind: "success",
-    text: "Trial Pro aktif. Silakan tautkan nomor WhatsApp dan Google Sheet.",
+    text: "Trial Pro aktif.",
   },
   sheet_connected: {
     kind: "success",

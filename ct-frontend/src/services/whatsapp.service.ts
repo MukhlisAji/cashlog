@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import { getAccessToken } from "@/lib/access-token";
 import {
   demoDelay,
   getMockWhatsAppStatus,
@@ -12,14 +12,6 @@ interface ApiResponse<T> {
   success: boolean;
   data?: T;
   error?: string;
-}
-
-async function getAccessToken(): Promise<string | null> {
-  const supabase = createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  return session?.access_token ?? null;
 }
 
 async function apiFetch<T>(

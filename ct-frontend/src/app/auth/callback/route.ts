@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { getSiteUrl } from "@/config/site";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
-import { withNotice } from "@/lib/notice";
 import { triggerWelcomeEmail } from "@/services/notification.service";
 import { connectGoogleTokenFromSession } from "@/services/sheets-connect.server";
 
@@ -12,15 +11,6 @@ function safeRedirectPath(value: string | null): string {
     return "/";
   }
   return value;
-}
-
-function needsAppAccess(path: string): boolean {
-  return (
-    path.startsWith("/trial") ||
-    path.startsWith("/ringkasan") ||
-    path.startsWith("/settings") ||
-    path.startsWith("/dashboard")
-  );
 }
 
 export async function GET(request: Request) {
@@ -40,8 +30,6 @@ export async function GET(request: Request) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error && data.session) {
-      const isGoogle = data.session.user.app_metadata?.provider === "google";
-
       if (phase === "sheets" && data.session.provider_refresh_token) {
         await connectGoogleTokenFromSession(
           data.session.access_token,
@@ -52,15 +40,7 @@ export async function GET(request: Request) {
 
       void triggerWelcomeEmail(data.session.access_token);
 
-      if (isGoogle && phase !== "sheets" && needsAppAccess(redirect)) {
-        return NextResponse.redirect(
-          `${origin}/auth/connect-sheets?redirect=${encodeURIComponent(redirect)}`,
-        );
-      }
-
-      const destination =
-        phase === "sheets" ? withNotice(redirect, "sheet_connected") : redirect;
-      return NextResponse.redirect(`${origin}${destination}`);
+      return NextResponse.redirect(`${origin}${redirect}`);
     }
   }
 
