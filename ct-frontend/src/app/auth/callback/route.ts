@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getSiteUrl } from "@/config/site";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 import { withNotice } from "@/lib/notice";
@@ -23,7 +24,8 @@ function needsAppAccess(path: string): boolean {
 }
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
+  const origin = getSiteUrl().replace(/\/$/, "");
   const redirect = safeRedirectPath(searchParams.get("redirect"));
   const phase = searchParams.get("phase");
 
