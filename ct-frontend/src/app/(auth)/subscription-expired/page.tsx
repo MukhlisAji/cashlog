@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import {
   SubscribeButton,
 } from "@/components/subscription/subscribe-button";
@@ -13,10 +15,12 @@ import {
 } from "@/components/ui/card";
 import { getSupportEmail } from "@/config/site";
 import { useAuth } from "@/hooks/use-auth";
+import { ROUTES } from "@/lib/constants";
 import { formatTierPrice } from "@/lib/pricing";
 
 export default function SubscriptionExpiredPage() {
   const { signOut } = useAuth();
+  const router = useRouter();
 
   async function handleSignOut() {
     await signOut();
