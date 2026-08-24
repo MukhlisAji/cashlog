@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   BarChart3,
   LayoutDashboard,
@@ -121,13 +121,11 @@ function MobileGuestFooter() {
 
 function MobileUserFooter({ showDashboardLink }: { showDashboardLink?: boolean }) {
   const { user, signOut } = useAuth();
-  const router = useRouter();
 
   if (!user) return null;
 
   async function handleSignOut() {
     await signOut();
-    router.push(ROUTES.home);
   }
 
   return (

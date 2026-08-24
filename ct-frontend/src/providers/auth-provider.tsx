@@ -12,6 +12,7 @@ import {
 
 import { authService, type SignUpResult } from "@/services/auth.service";
 import type { User } from "@/types";
+import { ROUTES } from "@/lib/constants";
 import { getDemoUser, isDemoLoggedIn, isDemoMode, resetDemoState, startDemoSession } from "@/lib/demo";
 
 interface AuthContextValue {
@@ -96,11 +97,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (isDemoMode()) {
       resetDemoState();
       setUser(null);
-      window.location.href = "/login";
+      window.location.assign(ROUTES.home);
       return;
     }
     await authService.signOut();
     setUser(null);
+    window.location.assign(ROUTES.home);
   }, []);
 
   const value = useMemo<AuthContextValue>(

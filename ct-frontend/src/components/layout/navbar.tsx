@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   LogOut,
@@ -85,13 +85,11 @@ function GuestActions({ className }: { className?: string }) {
 
 function UserMenu() {
   const { user, signOut } = useAuth();
-  const router = useRouter();
 
   if (!user) return null;
 
   async function handleSignOut() {
     await signOut();
-    router.push(ROUTES.home);
   }
 
   return (
