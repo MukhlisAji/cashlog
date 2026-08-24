@@ -36,6 +36,7 @@ export function useSubscription() {
     canManageHousehold: data?.canManageHousehold ?? false,
     daysRemaining: data?.daysRemaining ?? null,
     trialDaysRemaining: data?.trialDaysRemaining ?? null,
+    expiresAt: data?.expiresAt ?? null,
     autoRenewal: data?.autoRenewal ?? false,
     refresh,
   };

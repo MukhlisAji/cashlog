@@ -15,6 +15,7 @@ import {
   purchaseMemberSlots,
 } from "./household.service.js";
 import { parseIndonesianPhone } from "../whatsapp/whatsapp.utils.js";
+import { sendOnboardingTemplateToMemberIfReady } from "../whatsapp/wa-onboarding-template.service.js";
 
 const addMemberSchema = z.object({
   displayName: z.string().min(2).max(64),
@@ -87,6 +88,13 @@ export async function householdRoutes(app: FastifyInstance, env: Env) {
       if (!result.ok) {
         return reply.code(400).send({ success: false, error: result.error });
       }
+
+      void sendOnboardingTemplateToMemberIfReady(
+        env,
+        userId,
+        result.data.phone,
+        result.data.displayName,
+      );
 
       return { success: true, data: result.data };
     },

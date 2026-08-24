@@ -3,14 +3,13 @@ import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 
 import type { Env } from "../config/env.js";
+import { isMetaWhatsAppConfigured } from "../config/env.js";
 
-/** Stricter limits for unauthenticated public routes (join links). */
 export const PUBLIC_JOIN_RATE_LIMIT = {
   max: 20,
   timeWindow: "1 minute" as const,
 };
 
-/** Webhooks are token-guarded; allow bursts from payment provider retries. */
 export const WEBHOOK_RATE_LIMIT = {
   max: 120,
   timeWindow: "1 minute" as const,
@@ -60,6 +59,12 @@ export function assertProductionSecurity(env: Env): void {
 
   if (!env.OAUTH_STATE_SECRET || env.OAUTH_STATE_SECRET.length < 32) {
     issues.push("OAUTH_STATE_SECRET wajib minimal 32 karakter di production");
+  }
+
+  if (isMetaWhatsAppConfigured(env) && !env.META_APP_SECRET) {
+    issues.push(
+      "META_APP_SECRET wajib di production untuk verifikasi webhook Meta",
+    );
   }
 
   if (issues.length > 0) {

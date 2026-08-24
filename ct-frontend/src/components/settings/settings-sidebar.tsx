@@ -18,13 +18,15 @@ export function scrollToSettingsSection(id: SettingsSectionId) {
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-export function useSettingsSectionSpy() {
-  const [activeId, setActiveId] = useState<SettingsSectionId>("langganan");
+export function useSettingsSectionSpy(sectionIds: readonly SettingsSectionId[]) {
+  const [activeId, setActiveId] = useState<SettingsSectionId>(
+    sectionIds[0] ?? "langganan",
+  );
 
   useEffect(() => {
-    const elements = SETTINGS_SECTIONS.map(({ id }) =>
-      document.getElementById(id),
-    ).filter((el): el is HTMLElement => el !== null);
+    const elements = sectionIds
+      .map((id) => document.getElementById(id))
+      .filter((el): el is HTMLElement => el !== null);
 
     if (elements.length === 0) return;
 
@@ -45,16 +47,21 @@ export function useSettingsSectionSpy() {
 
     for (const element of elements) observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [sectionIds.join("|")]);
 
   return activeId;
 }
 
 type SettingsSidebarProps = {
   activeId: SettingsSectionId;
+  sectionIds?: readonly SettingsSectionId[];
 };
 
-export function SettingsSidebar({ activeId }: SettingsSidebarProps) {
+export function SettingsSidebar({
+  activeId,
+  sectionIds = SETTINGS_SECTIONS.map((s) => s.id),
+}: SettingsSidebarProps) {
+  const sections = SETTINGS_SECTIONS.filter((s) => sectionIds.includes(s.id));
   return (
     <nav
       aria-label="Navigasi pengaturan"
@@ -64,7 +71,7 @@ export function SettingsSidebar({ activeId }: SettingsSidebarProps) {
         Menu
       </p>
       <ul className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
-        {SETTINGS_SECTIONS.map(({ id, label }) => {
+        {sections.map(({ id, label }) => {
           const isActive = activeId === id;
 
           return (

@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { Navbar } from "@/components/layout/navbar";
 import { DemoBanner } from "@/components/layout/demo-banner";
 import { siteConfig, getSiteUrl } from "@/config/site";
+import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from "@/providers/auth-provider";
 import { ThemeProvider } from "@/providers/theme-provider";
 import { getServerDarkClass, THEME_STORAGE_KEY } from "@/lib/theme";
@@ -46,6 +47,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           <AuthProvider>
             <DemoBanner />
             <Navbar />
+            <Toaster />
             <main className="flex-1">{children}</main>
           </AuthProvider>
         </ThemeProvider>

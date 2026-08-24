@@ -75,7 +75,7 @@ export async function checkSubscriptionFromProfile(
     allowed,
     status: allowed ? status : "expired",
     tier: effectiveTier,
-    expiresAt: allowed ? expiresAt : null,
+    expiresAt,
     canAccessAnalytics: hasProEntitlements(
       allowed ? status : "expired",
       tier,

@@ -116,8 +116,54 @@ export interface MetaParsedWebhook {
 
 const META_GRAPH_BASE = "https://graph.facebook.com";
 
+function extractIncomingBody(
+  rawMessage: MetaWebhookEntryChangeValueMessage,
+): string | null {
+  if (typeof rawMessage.text?.body === "string" && rawMessage.text.body.trim()) {
+    return rawMessage.text.body;
+  }
+
+  const caption = (rawMessage as { image?: { caption?: string } }).image?.caption;
+  if (typeof caption === "string" && caption.trim()) return caption;
+
+  const interactive = rawMessage.interactive as
+    | {
+        button_reply?: { id?: string; title?: string };
+        list_reply?: { id?: string; title?: string };
+      }
+    | undefined;
+  const reply =
+    interactive?.button_reply?.title ??
+    interactive?.list_reply?.title ??
+    interactive?.button_reply?.id ??
+    interactive?.list_reply?.id;
+  if (typeof reply === "string" && reply.trim()) return reply;
+
+  return null;
+}
+
+export function extractIncomingImageMediaId(
+  raw: MetaWebhookEntryChangeValueMessage,
+): string | null {
+  const image = raw.image as { id?: string } | undefined;
+  return typeof image?.id === "string" && image.id.trim() ? image.id.trim() : null;
+}
+
+export function extractInteractiveCommandId(
+  raw: MetaWebhookEntryChangeValueMessage,
+): string | null {
+  const interactive = raw.interactive as
+    | {
+        button_reply?: { id?: string };
+        list_reply?: { id?: string };
+      }
+    | undefined;
+  const id = interactive?.button_reply?.id ?? interactive?.list_reply?.id;
+  return typeof id === "string" && id.trim() ? id.trim() : null;
+}
+
 export function buildMessagesEndpoint(env: Env): string {
-  const version = env.META_API_VERSION ?? "v20.0";
+  const version = env.META_API_VERSION ?? "v22.0";
   const phoneNumberId = env.META_PHONE_NUMBER_ID;
   if (!phoneNumberId) {
     throw new Error(
@@ -198,6 +244,44 @@ export class MetaService {
   }
 
   /**
+   * Marks the inbound message as read and shows the WhatsApp typing
+   * indicator (~25s, or until the next outbound message).
+   * Meta Graph v21+ is required; older versions ignore this payload.
+   */
+  async sendTypingIndicator(incomingMessageId: string): Promise<void> {
+    if (!incomingMessageId) return;
+    try {
+      await this.sendRaw({
+        messaging_product: "whatsapp",
+        status: "read",
+        message_id: incomingMessageId,
+        typing_indicator: { type: "text" },
+      });
+    } catch {
+      // Typing is best-effort; never block the reply path.
+    }
+  }
+
+  /**
+   * Keeps the typing bubble alive across OpenAI / Sheets work (Meta
+   * auto-hides it after 25 seconds unless refreshed).
+   */
+  async beginTyping(incomingMessageId: string): Promise<{ stop: () => void }> {
+    await this.sendTypingIndicator(incomingMessageId);
+    let stopped = false;
+    const timer = setInterval(() => {
+      if (stopped) return;
+      void this.sendTypingIndicator(incomingMessageId);
+    }, 20_000);
+    return {
+      stop: () => {
+        stopped = true;
+        clearInterval(timer);
+      },
+    };
+  }
+
+  /**
    * Production ready helper for the most common 90% case: sending a plain
    * text message to a WhatsApp user (`wa_id`).
    *
@@ -219,6 +303,124 @@ export class MetaService {
     return messageId;
   }
 
+  async sendWhatsAppTemplate(options: {
+    to: string;
+    templateName: string;
+    languageCode: string;
+    bodyParameters?: string[];
+    urlButtonSuffix?: string;
+  }): Promise<string> {
+    const components: Array<Record<string, unknown>> = [];
+    if (options.bodyParameters?.length) {
+      components.push({
+        type: "body",
+        parameters: options.bodyParameters.map((text) => ({
+          type: "text",
+          text: text.slice(0, 1024),
+        })),
+      });
+    }
+    if (options.urlButtonSuffix) {
+      components.push({
+        type: "button",
+        sub_type: "url",
+        index: "0",
+        parameters: [
+          {
+            type: "text",
+            text: options.urlButtonSuffix.slice(0, 2000),
+          },
+        ],
+      });
+    }
+
+    const result = await this.sendRaw<MetaSendMessageResponse>({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: options.to,
+      type: "template",
+      template: {
+        name: options.templateName,
+        language: { code: options.languageCode },
+        ...(components.length > 0 ? { components } : {}),
+      },
+    });
+    const messageId = result.messages?.[0]?.id;
+    if (!messageId) {
+      throw new Error(
+        `Meta template send missing message id: ${JSON.stringify(result)}`,
+      );
+    }
+    return messageId;
+  }
+
+  async sendInteractiveButtons(
+    to: string,
+    body: string,
+    buttons: Array<{ id: string; title: string }>,
+  ): Promise<string> {
+    const result = await this.sendRaw<MetaSendMessageResponse>({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: { text: body.slice(0, 1024) },
+        action: {
+          buttons: buttons.slice(0, 3).map((btn) => ({
+            type: "reply",
+            reply: { id: btn.id.slice(0, 256), title: btn.title.slice(0, 20) },
+          })),
+        },
+      },
+    });
+    const messageId = result.messages?.[0]?.id;
+    if (!messageId) {
+      throw new Error("Meta interactive button send missing message id");
+    }
+    return messageId;
+  }
+
+  async sendInteractiveList(
+    to: string,
+    body: string,
+    buttonLabel: string,
+    rows: Array<{ id: string; title: string; description?: string }>,
+  ): Promise<string> {
+    const result = await this.sendRaw<MetaSendMessageResponse>({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "interactive",
+      interactive: {
+        type: "list",
+        header: { type: "text", text: "Menu cashlog.id" },
+        body: { text: body.slice(0, 1024) },
+        action: {
+          button: buttonLabel.slice(0, 20),
+          sections: [
+            {
+              title: "Perintah",
+              rows: rows.slice(0, 10).map((row) => ({
+                id: row.id.slice(0, 200),
+                title: row.title.slice(0, 24),
+                ...(row.description
+                  ? { description: row.description.slice(0, 72) }
+                  : {}),
+              })),
+            },
+          ],
+        },
+      },
+    });
+    const messageId = result.messages?.[0]?.id;
+    if (!messageId) {
+      throw new Error("Meta interactive list send missing message id");
+    }
+    return messageId;
+  }
+
   async uploadMedia(
     buffer: Buffer,
     filename: string,
@@ -228,7 +430,7 @@ export class MetaService {
       throw new Error("Meta WhatsApp Cloud API is not configured.");
     }
 
-    const version = this.#env.META_API_VERSION ?? "v20.0";
+    const version = this.#env.META_API_VERSION ?? "v22.0";
     const phoneNumberId = this.#env.META_PHONE_NUMBER_ID!;
     const endpoint = `${META_GRAPH_BASE}/${version}/${phoneNumberId}/media`;
     const form = new FormData();
@@ -275,22 +477,28 @@ export class MetaService {
 
   async downloadMedia(mediaId: string): Promise<{ buffer: Buffer; mimetype: string } | null> {
     if (!isMetaWhatsAppConfigured(this.#env)) return null;
-    const version = this.#env.META_API_VERSION ?? "v20.0";
+    const version = this.#env.META_API_VERSION ?? "v22.0";
+    const authHeader = {
+      Authorization: `Bearer ${this.#env.META_ACCESS_TOKEN}`,
+    };
+
     const metaRes = await fetch(`${META_GRAPH_BASE}/${version}/${mediaId}`, {
-      headers: { Authorization: `Bearer ${this.#env.META_ACCESS_TOKEN}` },
+      headers: authHeader,
     });
     if (!metaRes.ok) return null;
     const metaJson = (await metaRes.json()) as { url?: string; mime_type?: string };
     if (!metaJson.url) return null;
 
     const fileRes = await fetch(metaJson.url, {
-      headers: { Authorization: `Bearer ${this.#env.META_ACCESS_TOKEN}` },
+      headers: authHeader,
+      redirect: "follow",
     });
     if (!fileRes.ok) return null;
     const arrayBuffer = await fileRes.arrayBuffer();
+    const headerMime = fileRes.headers.get("content-type")?.split(";")[0]?.trim();
     return {
       buffer: Buffer.from(arrayBuffer),
-      mimetype: metaJson.mime_type ?? "image/jpeg",
+      mimetype: headerMime || metaJson.mime_type || "image/jpeg",
     };
   }
 
@@ -337,13 +545,7 @@ export class MetaService {
               waId,
               messageId,
               timestamp: timestamp ?? "0",
-              body:
-              rawMessage.text?.body ??
-              (typeof (rawMessage as { image?: { caption?: string } }).image
-                ?.caption === "string"
-                ? (rawMessage as { image?: { caption?: string } }).image
-                    ?.caption ?? null
-                : null),
+              body: extractIncomingBody(rawMessage),
               type,
               phoneNumberId,
               displayPhoneNumber,

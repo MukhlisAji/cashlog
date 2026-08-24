@@ -324,7 +324,7 @@ export function LandingPage() {
             Siap mulai catat keuangan keluarga?
           </h2>
           <p className="mt-3 text-muted-foreground">
-            Trial {getTierLabel("pro")} {TRIAL_DAYS} hari gratis saat daftar — coba semua fitur
+            Trial {getTierLabel("pro")} {TRIAL_DAYS} hari — aktifkan dari tautan Coba Gratis
             lalu lanjut dengan satu paket lengkap.
           </p>
           <div className="mt-6 flex justify-center">

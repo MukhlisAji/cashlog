@@ -1,7 +1,7 @@
 import type { Env } from "../../config/env.js";
 import { getSheetsClient } from "../sheets/google-client.js";
 import { ensureYearTab } from "../sheets/sheet-template.service.js";
-import { normalizeSheetCellDateTime } from "../../lib/datetime-jakarta.js";
+import { getNowJakarta, normalizeSheetCellDateTime } from "../../lib/datetime-jakarta.js";
 
 export interface SheetTransaction {
   date: string;
@@ -11,6 +11,7 @@ export interface SheetTransaction {
   amount: number;
   category: string;
   source: string;
+  type: "expense" | "income";
 }
 
 function parseAmount(value: unknown): number {
@@ -26,18 +27,10 @@ export async function fetchYearTransactions(
   year?: string,
 ): Promise<SheetTransaction[]> {
   const sheets = await getSheetsClient(env, userId);
-  const y = year ?? String(new Date().getFullYear());
+  const y = year ?? getNowJakarta().date.slice(0, 4);
 
   await ensureYearTab(sheets, spreadsheetId, y);
 
-  // Column layout (post-month-unification):
-  //   A = tanggal (ISO or serial, time optional inside)
-  //   B = item
-  //   C = nominal
-  //   D = kategori
-  //   E = sumber
-  //   F = catatan
-  //   G = waktu (optional explicit)
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range: `${y}!A2:G2000`,
@@ -48,6 +41,7 @@ export async function fetchYearTransactions(
 
   return rows.map((r) => {
     const { date, month, time } = normalizeSheetCellDateTime(r[0], r[6]);
+    const note = String(r[5] ?? "").trim().toLowerCase();
     return {
       date,
       month,
@@ -56,6 +50,7 @@ export async function fetchYearTransactions(
       amount: parseAmount(r[2]),
       category: String(r[3] ?? "Lainnya"),
       source: String(r[4] ?? "whatsapp"),
+      type: note === "income" ? "income" : "expense",
     };
   });
 }

@@ -32,6 +32,8 @@ const envSchema = z.object({
   GEMINI_MODEL: z.string().default("gemini-2.5-flash"),
   // Midtrans payment gateway (Snap + Subscription API)
   MIDTRANS_SERVER_KEY: z.string().optional(),
+  MIDTRANS_CLIENT_KEY: z.string().optional(),
+  MIDTRANS_MERCHANT_ID: z.string().optional(),
   MIDTRANS_IS_PRODUCTION: z
     .enum(["true", "false"])
     .default("false")
@@ -55,9 +57,13 @@ const envSchema = z.object({
   // Meta WhatsApp Cloud API (centralized B2C bot)
   META_VERIFY_TOKEN: z.string().optional(),
   META_ACCESS_TOKEN: z.string().optional(),
+  /** Meta app secret — HMAC for X-Hub-Signature-256 on webhook POSTs */
+  META_APP_SECRET: z.string().optional(),
   META_PHONE_NUMBER_ID: z.string().optional(),
-  META_API_VERSION: z.string().default("v20.0"),
+  META_API_VERSION: z.string().default("v22.0"),
   META_WEBHOOK_PATH: z.string().default("webhook"),
+  META_WA_ONBOARDING_TEMPLATE: z.string().default("onboarding_notif_v1"),
+  META_WA_ONBOARDING_TEMPLATE_LANG: z.string().default("id"),
 });
 
 export type Env = z.infer<typeof envSchema>;

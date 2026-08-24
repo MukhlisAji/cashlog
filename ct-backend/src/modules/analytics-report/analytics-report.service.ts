@@ -22,32 +22,14 @@ export interface ReportTarget {
   asOfDate?: string;
 }
 
-export function resolveReportTarget(
-  dayOfMonth: number,
-  jakartaDate: string,
-): ReportTarget | null {
-  const currentMonth = jakartaDate.slice(0, 7);
-
-  if (dayOfMonth === 1) {
-    const [y, m] = currentMonth.split("-").map(Number);
-    const prev = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
-    return {
-      kind: "monthly",
-      month: prev,
-      reportKey: `monthly:${prev}`,
-    };
-  }
-
-  if (dayOfMonth === 15) {
-    return {
-      kind: "midmonth",
-      month: currentMonth,
-      reportKey: `midmonth:${currentMonth}`,
-      asOfDate: jakartaDate,
-    };
-  }
-
-  return null;
+export function resolveWeeklyReportTarget(jakartaDate: string): ReportTarget {
+  const month = jakartaDate.slice(0, 7);
+  return {
+    kind: "weekly",
+    month,
+    reportKey: `weekly:${jakartaDate}`,
+    asOfDate: jakartaDate,
+  };
 }
 
 function buildReportCaption(kind: ReportKind, month: string): string {
@@ -62,6 +44,16 @@ function buildReportCaption(kind: ReportKind, month: string): string {
     ].join("\n");
   }
 
+  if (kind === "weekly") {
+    return [
+      `📊 *Laporan Mingguan ${BRAND_NAME}* — ${label}`,
+      "",
+      "Ringkasan keuangan minggu ini: angka, chart, budget, dan rekomendasi ada di PDF.",
+      "",
+      BRAND_NAME,
+    ].join("\n");
+  }
+
   return [
     `📊 *Laporan Analitik ${BRAND_NAME}* — ${label}`,
     "",
@@ -71,11 +63,14 @@ function buildReportCaption(kind: ReportKind, month: string): string {
   ].join("\n");
 }
 
-function buildReportFilename(kind: ReportKind, month: string): string {
+function buildReportFilename(kind: ReportKind, month: string, reportKey: string): string {
   const slug = month.replace("-", "");
-  return kind === "monthly"
-    ? `cashlog-analitik-${slug}-bulanan.pdf`
-    : `cashlog-analitik-${slug}-progress.pdf`;
+  if (kind === "monthly") return `cashlog-analitik-${slug}-bulanan.pdf`;
+  if (kind === "weekly") {
+    const day = reportKey.replace("weekly:", "").replace(/-/g, "");
+    return `cashlog-analitik-${day || slug}-mingguan.pdf`;
+  }
+  return `cashlog-analitik-${slug}-progress.pdf`;
 }
 
 function formatGeneratedAt(): string {
@@ -157,7 +152,7 @@ export async function sendAnalyticsReportToUser(
   if (!pdf) return false;
 
   const caption = buildReportCaption(target.kind, target.month);
-  const filename = buildReportFilename(target.kind, target.month);
+  const filename = buildReportFilename(target.kind, target.month, target.reportKey);
 
   const sent = await sendDocumentToLeadUser(userId, pdf, filename, caption);
   if (sent) {
@@ -185,12 +180,16 @@ export async function runScheduledAnalyticsReports(
   }
 }
 
-export function shouldRunReportToday(dayOfMonth: number): boolean {
-  return dayOfMonth === 1 || dayOfMonth === 15;
+export function isMondayJakarta(weekday: string): boolean {
+  return weekday === "Mon" || weekday.startsWith("Mon");
 }
 
 export function getReportTargetForToday(): ReportTarget | null {
   const { date } = getNowJakarta();
-  const day = Number(date.slice(8, 10));
-  return resolveReportTarget(day, date);
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Jakarta",
+    weekday: "short",
+  }).format(new Date());
+  if (!isMondayJakarta(weekday)) return null;
+  return resolveWeeklyReportTarget(date);
 }

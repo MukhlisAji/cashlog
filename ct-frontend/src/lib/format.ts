@@ -27,6 +27,18 @@ export function formatTransactionDateTime(dateInput: string | Date | null | unde
   return datePart;
 }
 
+export function formatLongDate(dateInput: string | Date | null | undefined): string | null {
+  if (!dateInput) return null;
+  const d = new Date(dateInput);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "Asia/Jakarta",
+  }).format(d);
+}
+
 export function formatMonthLabel(month: string): string {
   const [year, m] = month.split("-");
   const date = new Date(Number(year), Number(m) - 1, 1);

@@ -5,10 +5,7 @@ import {
   googleConnectionRepository,
 } from "../config/config.repository.js";
 
-const SCOPES = [
-  "https://www.googleapis.com/auth/spreadsheets",
-  "https://www.googleapis.com/auth/drive.file",
-];
+const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
 
 export function createOAuth2Client(env: Env) {
   return new google.auth.OAuth2(
@@ -22,8 +19,8 @@ export function getGoogleAuthUrl(env: Env, state: string): string {
   const client = createOAuth2Client(env);
   return client.generateAuthUrl({
     access_type: "offline",
-    prompt: "consent",
     scope: SCOPES,
+    include_granted_scopes: true,
     state,
   });
 }

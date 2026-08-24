@@ -20,66 +20,84 @@ export interface TransactionRow {
   recorder?: string;
 }
 
+function toSheetValues(row: TransactionRow): (string | number)[] {
+  return [
+    row.date,
+    row.item,
+    row.amount,
+    row.category,
+    row.source,
+    row.note,
+    row.time,
+    row.recorder ?? "",
+  ];
+}
+
 export async function appendTransaction(
   env: Env,
   userId: string,
   spreadsheetId: string,
   row: TransactionRow,
 ) {
+  await appendTransactions(env, userId, spreadsheetId, [row]);
+}
+
+export async function appendTransactions(
+  env: Env,
+  userId: string,
+  spreadsheetId: string,
+  items: TransactionRow[],
+) {
+  if (items.length === 0) return;
+
+  const byYear = new Map<string, TransactionRow[]>();
+  for (const row of items) {
+    const year = row.date.slice(0, 4);
+    const list = byYear.get(year) ?? [];
+    list.push(row);
+    byYear.set(year, list);
+  }
+
   const sheets = await getSheetsClient(env, userId);
-  const year = row.date.slice(0, 4);
 
-  await ensureYearTab(sheets, spreadsheetId, year);
+  for (const [year, yearRows] of byYear) {
+    await ensureYearTab(sheets, spreadsheetId, year);
 
-  // Google Sheets `values.append` follows the first contiguous "table".
-  // After a corrupted write (data starting at G), append keeps writing at G.
-  // Always write A{n}:H{n} explicitly, and restore the header on row 1.
-  const existing = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range: `${year}!A:H`,
-    majorDimension: "ROWS",
-  });
-  const rows = existing.data.values ?? [];
+    const existing = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${year}!A:H`,
+      majorDimension: "ROWS",
+    });
+    const rows = existing.data.values ?? [];
 
-  const header = [...TRANSACTION_HEADERS];
-  const headerBroken =
-    rows.length === 0 ||
-    header.some((label, i) => String(rows[0]?.[i] ?? "").trim() !== label);
+    const header = [...TRANSACTION_HEADERS];
+    const headerBroken =
+      rows.length === 0 ||
+      header.some((label, i) => String(rows[0]?.[i] ?? "").trim() !== label);
 
-  if (headerBroken) {
+    if (headerBroken) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${year}!A1:H1`,
+        valueInputOption: "RAW",
+        requestBody: { values: [header] },
+      });
+    }
+
+    let nextRow = 2;
+    for (let i = 1; i < rows.length; i++) {
+      const hasAny = (rows[i] ?? []).some((cell) => String(cell ?? "").trim());
+      if (hasAny) nextRow = i + 2;
+    }
+
+    const lastRow = nextRow + yearRows.length - 1;
     await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: `${year}!A1:H1`,
-      valueInputOption: "RAW",
-      requestBody: { values: [header] },
+      range: `${year}!A${nextRow}:H${lastRow}`,
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: yearRows.map(toSheetValues) },
     });
   }
-
-  let nextRow = 2;
-  for (let i = 1; i < rows.length; i++) {
-    const hasAny = (rows[i] ?? []).some((cell) => String(cell ?? "").trim());
-    if (hasAny) nextRow = i + 2;
-  }
-
-  await sheets.spreadsheets.values.update({
-    spreadsheetId,
-    range: `${year}!A${nextRow}:H${nextRow}`,
-    valueInputOption: "USER_ENTERED",
-    requestBody: {
-      values: [
-        [
-          row.date,
-          row.item,
-          row.amount,
-          row.category,
-          row.source,
-          row.note,
-          row.time,
-          row.recorder ?? "",
-        ],
-      ],
-    },
-  });
 }
 
 export interface DashboardSummary {
@@ -162,12 +180,15 @@ export async function fetchDashboardData(
   }));
 
   const monthRows = parsed.filter((r) => r.month === activeMonth);
+  const expenseRows = monthRows.filter(
+    (r) => String(r.raw[5] ?? "").trim().toLowerCase() !== "income",
+  );
 
-  const totalExpense = monthRows.reduce((sum, r) => sum + r.amount, 0);
-  const transactionCount = monthRows.length;
+  const totalExpense = expenseRows.reduce((sum, r) => sum + r.amount, 0);
+  const transactionCount = expenseRows.length;
 
   const categoryTotals = new Map<string, number>();
-  for (const r of monthRows) {
+  for (const r of expenseRows) {
     const cat = r.category || "Lainnya";
     categoryTotals.set(cat, (categoryTotals.get(cat) ?? 0) + r.amount);
   }
@@ -186,7 +207,9 @@ export async function fetchDashboardData(
     .filter((row) => row.amount > 0)
     .sort((a, b) => b.amount - a.amount);
 
-  const yearTotal = rows.reduce((sum, r) => sum + parseAmount(r[2]), 0);
+  const yearTotal = parsed
+    .filter((r) => String(r.raw[5] ?? "").trim().toLowerCase() !== "income")
+    .reduce((sum, r) => sum + r.amount, 0);
 
   const recentTransactions = allTransactions.slice(-10).reverse();
 

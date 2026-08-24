@@ -1,14 +1,9 @@
-/** TTL for bot-sent message IDs (skip re-processing our own replies in self-chat) */
+import { getSupabaseAdmin } from "../../lib/supabase.js";
+
 const OUTBOUND_TTL_MS = 60_000;
+const PROCESSED_TTL_MS = 10 * 60_000;
 
-/** TTL for recently handled inbound IDs (reconnect / duplicate upsert) */
-const PROCESSED_TTL_MS = 30_000;
-
-/**
- * Tracks outbound bot messages and recently processed inbound IDs per user.
- * Prevents infinite loops in self-chat where user and bot messages both have fromMe=true.
- */
-class WaMessageDedup {
+class WaMessageDedupMemory {
   private outbound = new Map<string, Set<string>>();
   private processed = new Map<string, Set<string>>();
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -23,14 +18,10 @@ class WaMessageDedup {
     return this.outbound.get(userId)?.has(messageId) ?? false;
   }
 
-  /** Returns false if this inbound message was already handled. */
-  markProcessed(userId: string, messageId: string | undefined | null): boolean {
-    if (!messageId) return true;
-
-    const set = this.processed.get(userId) ?? new Set<string>();
+  markProcessedLocal(scope: string, messageId: string): boolean {
+    const set = this.processed.get(scope) ?? new Set<string>();
     if (set.has(messageId)) return false;
-
-    this.addWithTtl(this.processed, userId, messageId, PROCESSED_TTL_MS);
+    this.addWithTtl(this.processed, scope, messageId, PROCESSED_TTL_MS);
     return true;
   }
 
@@ -61,4 +52,29 @@ class WaMessageDedup {
   }
 }
 
-export const waMessageDedup = new WaMessageDedup();
+export const waMessageDedup = new WaMessageDedupMemory();
+
+/**
+ * Claim an inbound WhatsApp message id. Returns false if already processed
+ * (Meta retry / process restart). Persists to `processed_wa_messages`.
+ */
+export async function claimInboundWaMessage(
+  messageId: string | undefined | null,
+): Promise<boolean> {
+  if (!messageId) return true;
+  if (!waMessageDedup.markProcessedLocal("in", messageId)) return false;
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return true;
+
+  const { error } = await supabase
+    .from("processed_wa_messages")
+    .insert({ message_id: messageId });
+
+  if (error?.code === "23505") return false;
+  if (error) {
+    console.error("[wa-dedup] persist failed", error.message);
+    return true;
+  }
+  return true;
+}

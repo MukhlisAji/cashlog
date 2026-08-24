@@ -23,7 +23,7 @@ interface LoginFormProps {
   hasError?: boolean;
 }
 
-export function LoginForm({ redirectTo = "/ringkasan", hasError }: LoginFormProps) {
+export function LoginForm({ redirectTo = "/", hasError }: LoginFormProps) {
   const { signInAsDemo, signInWithGoogle, signInWithPassword } = useAuth();
   const router = useRouter();
 

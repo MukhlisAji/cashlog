@@ -1,10 +1,12 @@
 import type { Env } from "../../config/env.js";
+import {
+  claimSchedulerJob,
+  releaseSchedulerJob,
+} from "../../lib/scheduler-lock.js";
 import { runTrialEndReports } from "./trial-end-report.service.js";
 
 const REPORT_HOUR_JAKARTA = 8;
 const TICK_MS = 30_000;
-
-let lastGlobalTrialReportDate: string | null = null;
 
 function getJakartaDateTime(): { date: string; hour: number; minute: number } {
   const now = new Date();
@@ -33,13 +35,17 @@ export function startTrialEndReportScheduler(env: Env): void {
   setInterval(() => {
     const { date, hour, minute } = getJakartaDateTime();
     if (hour !== REPORT_HOUR_JAKARTA || minute !== 0) return;
-    if (lastGlobalTrialReportDate === date) return;
-
-    lastGlobalTrialReportDate = date;
-    void runTrialEndReports(env).catch((error) => {
-      console.error({ error }, "[trial-report] batch failed");
-      lastGlobalTrialReportDate = null;
-    });
+    const jobKey = `trial-end-report:${date}`;
+    void (async () => {
+      const claimed = await claimSchedulerJob(jobKey);
+      if (!claimed) return;
+      try {
+        await runTrialEndReports(env);
+      } catch (error) {
+        console.error({ error }, "[trial-report] batch failed");
+        await releaseSchedulerJob(jobKey);
+      }
+    })();
   }, TICK_MS);
 
   console.info(

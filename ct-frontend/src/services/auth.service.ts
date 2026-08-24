@@ -42,7 +42,7 @@ export function mapSupabaseUser(supabaseUser: SupabaseUser): User {
 }
 
 export const authService = {
-  async signInWithGoogle(redirectTo = "/ringkasan") {
+  async signInWithGoogle(redirectTo = "/") {
     if (!canUseSupabaseAuth()) {
       throw new Error("Supabase belum dikonfigurasi. Aktifkan demo mode atau isi .env.local");
     }
@@ -55,10 +55,31 @@ export const authService = {
       provider: "google",
       options: {
         redirectTo: `${origin}/auth/callback?redirect=${encodeURIComponent(redirectTo)}`,
+      },
+    });
+
+    if (error) throw error;
+  },
+
+  /** Incremental Sheets grant — Google shows "additional access" (Continue), not the checklist. */
+  async signInWithGoogleSheets(redirectTo = "/ringkasan", loginHint?: string) {
+    if (!canUseSupabaseAuth()) {
+      throw new Error("Supabase belum dikonfigurasi");
+    }
+
+    const supabase = createClient();
+    const origin =
+      process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin;
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${origin}/auth/callback?phase=sheets&redirect=${encodeURIComponent(redirectTo)}`,
         scopes: GOOGLE_SHEETS_SCOPES,
         queryParams: {
           access_type: "offline",
-          prompt: "consent",
+          include_granted_scopes: "true",
+          ...(loginHint ? { login_hint: loginHint } : {}),
         },
       },
     });

@@ -4,7 +4,7 @@ import { formatMonthLabel, formatRupiah } from "../whatsapp/wa-sheet-queries.js"
 import type { ComputedInsights } from "./analytics-insights.js";
 import { getCategoryColor } from "./analytics-colors.js";
 
-export type ReportKind = "monthly" | "midmonth";
+export type ReportKind = "monthly" | "midmonth" | "weekly";
 
 export interface ReportHtmlInput {
   data: AnalyticsData;
@@ -181,12 +181,16 @@ export function buildAnalyticsReportHtml(input: ReportHtmlInput): string {
   const reportTitle =
     kind === "monthly"
       ? `Laporan Bulanan — ${monthLabel}`
-      : `Laporan Progress — ${monthLabel}`;
+      : kind === "weekly"
+        ? `Laporan Mingguan — ${monthLabel}`
+        : `Laporan Progress — ${monthLabel}`;
 
   const subtitle =
     kind === "monthly"
       ? "Ringkasan pengeluaran bulan penuh"
-      : "Progress pengeluaran pertengahan bulan";
+      : kind === "weekly"
+        ? "Ringkasan pengeluaran minggu ini (Senin pagi)"
+        : "Progress pengeluaran pertengahan bulan";
 
   const momTrend =
     insights.momChangePct !== null

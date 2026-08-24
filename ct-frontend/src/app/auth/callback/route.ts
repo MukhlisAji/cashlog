@@ -2,12 +2,30 @@ import { NextResponse } from "next/server";
 
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
+import { withNotice } from "@/lib/notice";
 import { triggerWelcomeEmail } from "@/services/notification.service";
 import { connectGoogleTokenFromSession } from "@/services/sheets-connect.server";
 
+function safeRedirectPath(value: string | null): string {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return "/";
+  }
+  return value;
+}
+
+function needsAppAccess(path: string): boolean {
+  return (
+    path.startsWith("/trial") ||
+    path.startsWith("/ringkasan") ||
+    path.startsWith("/settings") ||
+    path.startsWith("/dashboard")
+  );
+}
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
-  const redirect = searchParams.get("redirect") ?? "/ringkasan";
+  const redirect = safeRedirectPath(searchParams.get("redirect"));
+  const phase = searchParams.get("phase");
 
   if (!isSupabaseConfigured()) {
     return NextResponse.redirect(`${origin}/login`);
@@ -20,7 +38,9 @@ export async function GET(request: Request) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error && data.session) {
-      if (data.session.provider_refresh_token) {
+      const isGoogle = data.session.user.app_metadata?.provider === "google";
+
+      if (phase === "sheets" && data.session.provider_refresh_token) {
         await connectGoogleTokenFromSession(
           data.session.access_token,
           data.session.provider_refresh_token,
@@ -28,9 +48,17 @@ export async function GET(request: Request) {
         );
       }
 
-      // Backend deduplicates via welcome_email_sent_at on profile
       void triggerWelcomeEmail(data.session.access_token);
-      return NextResponse.redirect(`${origin}${redirect}`);
+
+      if (isGoogle && phase !== "sheets" && needsAppAccess(redirect)) {
+        return NextResponse.redirect(
+          `${origin}/auth/connect-sheets?redirect=${encodeURIComponent(redirect)}`,
+        );
+      }
+
+      const destination =
+        phase === "sheets" ? withNotice(redirect, "sheet_connected") : redirect;
+      return NextResponse.redirect(`${origin}${destination}`);
     }
   }
 

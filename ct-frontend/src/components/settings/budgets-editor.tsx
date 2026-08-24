@@ -1,12 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Save } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
+import { SettingsSaveButton } from "@/components/settings/settings-save-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { showToast } from "@/components/ui/toaster";
 import { formatMonthLabel, formatRupiah } from "@/lib/format";
+import { NOTICE_MESSAGES } from "@/lib/notice";
 import {
   categoriesService,
   type Category,
@@ -29,10 +32,10 @@ function formatAmountInput(amount: number): string {
 export function BudgetsEditor() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [savedAmounts, setSavedAmounts] = useState<Record<string, string>>({});
   const [month, setMonth] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -52,6 +55,7 @@ export function BudgetsEditor() {
         map[b.category] = formatAmountInput(b.amount);
       }
       setAmounts(map);
+      setSavedAmounts(map);
     }
 
     setIsLoading(false);
@@ -67,9 +71,22 @@ export function BudgetsEditor() {
     [amounts],
   );
 
+  const dirty = useMemo(() => {
+    const keys = new Set([
+      ...Object.keys(savedAmounts),
+      ...Object.keys(amounts),
+      ...categories.map((c) => c.name),
+    ]);
+    for (const key of keys) {
+      if (parseAmount(amounts[key] ?? "") !== parseAmount(savedAmounts[key] ?? "")) {
+        return true;
+      }
+    }
+    return false;
+  }, [amounts, savedAmounts, categories]);
+
   async function handleSave() {
     setIsSaving(true);
-    setSaved(false);
 
     const budgets: BudgetItem[] = categories.map((cat) => ({
       category: cat.name,
@@ -78,9 +95,25 @@ export function BudgetsEditor() {
 
     const result = await budgetsService.save(budgets, month || undefined);
 
-    if (result.success && result.data) {
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+    if (result.success) {
+      const map: Record<string, string> = {};
+      if (result.data?.budgets) {
+        for (const b of result.data.budgets) {
+          map[b.category] = formatAmountInput(b.amount);
+        }
+      } else {
+        for (const [key, value] of Object.entries(amounts)) {
+          map[key] = value;
+        }
+      }
+      setAmounts(map);
+      setSavedAmounts(map);
+      showToast(NOTICE_MESSAGES.saved.kind, NOTICE_MESSAGES.saved.text);
+    } else {
+      showToast(
+        NOTICE_MESSAGES.save_failed.kind,
+        NOTICE_MESSAGES.save_failed.text,
+      );
     }
 
     setIsSaving(false);
@@ -154,18 +187,25 @@ export function BudgetsEditor() {
         ))}
       </div>
 
-      <Button
-        onClick={() => void handleSave()}
-        disabled={isSaving}
-        className="w-fit"
-      >
-        {isSaving ? (
-          <Loader2 className="size-4 animate-spin" />
-        ) : (
-          <Save className="size-4" />
-        )}
-        {saved ? "Tersimpan!" : "Simpan Budget"}
-      </Button>
+      <div className="flex flex-col gap-2">
+        {dirty ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 w-full"
+            disabled={isSaving}
+            onClick={() => setAmounts(savedAmounts)}
+          >
+            Reset
+          </Button>
+        ) : null}
+        <SettingsSaveButton
+          onClick={() => void handleSave()}
+          loading={isSaving}
+          disabled={!dirty}
+          label="Simpan"
+        />
+      </div>
     </div>
   );
 }

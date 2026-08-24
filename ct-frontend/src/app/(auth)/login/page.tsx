@@ -34,7 +34,7 @@ function getLoginDescription() {
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
-  const redirectTo = params.redirect ?? "/ringkasan";
+  const redirectTo = params.redirect ?? "/";
   const hasError = params.error === "auth_callback_failed";
 
   return (

@@ -15,7 +15,9 @@ async function main() {
     startAnalyticsReportScheduler(env);
     startTrialEndReportScheduler(env);
     await app.listen({ port: env.PORT, host: env.HOST });
-    app.log.info(`ct-backend running at http://${env.HOST}:${env.PORT}`);
+    app.log.warn(
+      `ct-backend running at http://${env.HOST}:${env.PORT} — Meta webhook POST /meta/webhook and /api/meta/webhook`,
+    );
   } catch (error) {
     app.log.error(error);
     process.exit(1);

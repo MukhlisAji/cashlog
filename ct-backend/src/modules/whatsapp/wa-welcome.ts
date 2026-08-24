@@ -9,11 +9,7 @@ export const FIRST_CHAT_WELCOME_MESSAGE = [
   "",
   "⚠️ Nomor kamu belum terhubung ke akun.",
   "",
-  "Tautkan dulu (pilih salah satu):",
-  `1️⃣ Buka ${BRAND_NAME}${SETTINGS_PATH} → daftarkan nomor WhatsApp`,
-  `2️⃣ Atau di Pengaturan → Chat ke Bot → kirim pesan LINK XXXX yang sudah terisi otomatis`,
-  "",
-  "Kode verifikasi dibuat di web (tombol Chat ke Bot), bukan dikirim otomatis oleh bot.",
+  `Buka ${BRAND_NAME}${SETTINGS_PATH}, isi nomor WhatsApp, lalu tekan *Simpan & Aktifkan Pencatatan* (izin Google Sheet diminta di situ).`,
   "",
   'Setelah terhubung, baru kirim transaksi — contoh: "Beli kopi 20rb".',
 ].join("\n");
@@ -21,11 +17,7 @@ export const FIRST_CHAT_WELCOME_MESSAGE = [
 export const NOT_LINKED_TRANSACTION_REPLY = [
   "⚠️ Nomor WhatsApp ini belum terhubung ke akun Cashlog, jadi transaksi belum bisa dicatat.",
   "",
-  "Tautkan dulu:",
-  `• ${BRAND_NAME}${SETTINGS_PATH} → daftarkan nomor, atau`,
-  "• Pengaturan → Chat ke Bot → kirim pesan LINK XXXX (kode otomatis dari web)",
-  "",
-  "Kode LINK tidak muncul otomatis di chat ini — harus dari tombol Chat ke Bot di Pengaturan web.",
+  `Buka ${BRAND_NAME}${SETTINGS_PATH} → isi nomor → *Simpan & Aktifkan Pencatatan*.`,
 ].join("\n");
 
 /** User tried to chat before linking (transaction, not a LINK code). */

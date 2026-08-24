@@ -23,6 +23,7 @@ drop trigger if exists on_auth_user_created on auth.users;
 drop function if exists public.handle_new_user() cascade;
 drop function if exists public.claim_whatsapp_link_code(text, text) cascade;
 drop table if exists public.whatsapp_link_codes  cascade;
+drop table if exists public.transactions         cascade;
 drop table if exists public.budgets              cascade;
 drop table if exists public.categories           cascade;
 drop table if exists public.user_config          cascade;
@@ -44,7 +45,7 @@ create table public.profiles (
   email                 text,
   avatar_url            text,
   phone_number          text,
-  subscription_status   text not null default 'trial'
+  subscription_status   text not null default 'free'
     constraint profiles_subscription_status_check
       check (subscription_status in ('trial', 'active', 'expired', 'free')),
   subscription_tier     text
@@ -52,6 +53,8 @@ create table public.profiles (
       check (subscription_tier in ('pro')),
   subscription_expires_at timestamptz,
   welcome_email_sent_at   timestamptz,
+  has_onboarded           boolean not null default false,
+  ooc_count               integer not null default 0,
   midtrans_subscription_id text,
   created_at              timestamptz not null default now(),
   updated_at              timestamptz not null default now()
@@ -97,11 +100,25 @@ create table public.user_config (
   daily_tx_count               integer     not null default 0,
   daily_tx_date                date,
   last_evening_reminder_date   date,           -- Last 21:00 WIB WA reminder
-  last_analytics_report_key    text,           -- Dedup: monthly:YYYY-MM / midmonth:YYYY-MM
+  last_analytics_report_key    text,           -- Dedup: weekly:YYYY-MM-DD
   last_trial_end_report_key    text,           -- Dedup: trial hari ke-7
   created_at                   timestamptz not null default now(),
   updated_at                   timestamptz not null default now()
 );
+
+-- Restart-safe inbound WA dedup + one-shot cron claims (service role only)
+create table if not exists public.processed_wa_messages (
+  message_id   text primary key,
+  processed_at timestamptz not null default now()
+);
+
+create table if not exists public.scheduler_job_runs (
+  job_key    text primary key,
+  claimed_at timestamptz not null default now()
+);
+
+alter table public.processed_wa_messages enable row level security;
+alter table public.scheduler_job_runs enable row level security;
 
 -- -----------------------------------------------------------------------------
 -- 4. Expense categories + parser LLM keywords (sorted by sort_order)
@@ -140,6 +157,28 @@ create table public.budgets (
 
 create index budgets_user_id_month_idx
   on public.budgets (user_id, month);
+
+-- -----------------------------------------------------------------------------
+-- 5a. WhatsApp / app transaction ledger (Sheet remains dashboard source of truth)
+-- -----------------------------------------------------------------------------
+create table public.transactions (
+  id                uuid primary key default gen_random_uuid(),
+  user_id           uuid not null
+    references public.profiles(id) on delete cascade,
+  type              text not null
+    constraint transactions_type_check
+      check (type in ('expense', 'income')),
+  amount            bigint not null,
+  category          text not null,
+  description       text not null,
+  transaction_date  date not null,
+  source            text not null default 'whatsapp',
+  recorder          text,
+  created_at        timestamptz not null default now()
+);
+
+create index transactions_user_id_date_idx
+  on public.transactions (user_id, transaction_date desc);
 
 -- -----------------------------------------------------------------------------
 -- 5b. Household add-on — whitelist nomor WA yang menulis ke sheet lead.
@@ -280,6 +319,7 @@ alter table public.google_connections enable row level security;
 alter table public.user_config        enable row level security;
 alter table public.categories         enable row level security;
 alter table public.budgets            enable row level security;
+alter table public.transactions       enable row level security;
 
 -- -----------------------------------------------------------------------------
 -- 6.1 profiles (id = auth.uid())
@@ -379,6 +419,24 @@ create policy "budgets — user delete own"
   on public.budgets for delete
   using (auth.uid() = user_id);
 
+-- 6.5b transactions
+create policy "transactions — user read own"
+  on public.transactions for select
+  using (auth.uid() = user_id);
+
+create policy "transactions — user insert own"
+  on public.transactions for insert
+  with check (auth.uid() = user_id);
+
+create policy "transactions — user update own"
+  on public.transactions for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "transactions — user delete own"
+  on public.transactions for delete
+  using (auth.uid() = user_id);
+
 alter table public.households enable row level security;
 alter table public.household_members enable row level security;
 alter table public.whatsapp_link_codes enable row level security;
@@ -436,12 +494,8 @@ create policy "household_members — lead delete own"
 -- Kode hanya dikelola backend service-role. Tidak ada policy client.
 
 -- =============================================================================
--- 7. Auto-create profile on first signup → TRIAL Pro 7 hari.
---    Trigger AFTER INSERT ON auth.users:
---      • create profile row (id + core fields)
---      • set subscription_status = 'trial', tier = 'pro', expires = now + 7d
---      • set phone_number dari raw_user_meta_data.phone / whatsapp / phone_number
---        (jika ada) supaya mapping ke Meta wa_id bisa langsung.
+-- 7. Auto-create profile on first signup as FREE (no trial yet).
+--    Trial starts only via POST /api/subscription/start-trial (link /trial).
 -- =============================================================================
 create or replace function public.handle_new_user()
 returns trigger
@@ -470,7 +524,9 @@ begin
     phone_number,
     subscription_status,
     subscription_tier,
-    subscription_expires_at
+    subscription_expires_at,
+    has_onboarded,
+    ooc_count
   )
   values (
     new.id,
@@ -482,9 +538,11 @@ begin
     new.email,
     new.raw_user_meta_data ->> 'avatar_url',
     v_phone_number,
-    'trial',
-    'pro',
-    now() + interval '7 days'
+    'free',
+    null,
+    null,
+    false,
+    0
   );
 
   return new;

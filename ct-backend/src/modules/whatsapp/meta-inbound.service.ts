@@ -1,62 +1,29 @@
 import type { Env } from "../../config/env.js";
-import { checkSubscription } from "../../lib/subscription.js";
-import { householdRepository } from "../household/household.repository.js";
-import { processWhatsAppMessage } from "../parser/message-handler.service.js";
 import type { MetaIncomingMessageEnvelope } from "./meta-cloud.service.js";
 import { getMetaService } from "./meta-outbound.service.js";
-
-function toParserMessage(msg: MetaIncomingMessageEnvelope): unknown {
-  const image = msg.raw.image as { id?: string; caption?: string } | undefined;
-  if (msg.type === "image" && image?.id) {
-    return {
-      message: {
-        imageMessage: {
-          id: image.id,
-          caption: image.caption ?? msg.body ?? "",
-        },
-      },
-    };
-  }
-
-  return {
-    message: {
-      conversation: msg.body ?? "",
-    },
-  };
-}
+import { claimInboundWaMessage } from "./wa-message-dedup.js";
+import { routeIncomingWhatsAppMessage } from "./wa-router.service.js";
 
 export async function handleMetaIncomingMessage(
   env: Env,
   msg: MetaIncomingMessageEnvelope,
 ): Promise<void> {
-  const ctx = await householdRepository.getActiveByPhone(msg.waId);
-  if (!ctx) return;
-
-  const sub = await checkSubscription(ctx.leadUserId);
-  if (!sub.allowed) {
-    await getMetaService().sendWhatsAppMessage(
-      msg.waId,
-      "⚠️ Akun kamu tidak aktif. Buka dashboard cashlog.id untuk info langganan.",
-    );
+  const claimed = await claimInboundWaMessage(msg.messageId);
+  if (!claimed) {
+    console.warn("[wa-inbound] duplicate skipped", msg.messageId);
     return;
   }
 
-  const meta = getMetaService();
-  const result = await processWhatsAppMessage(
-    env,
-    ctx,
-    toParserMessage(msg),
-    async (message) => {
-      const parsed = message as {
-        message?: { imageMessage?: { id?: string } };
-      };
-      const mediaId = parsed.message?.imageMessage?.id;
-      if (!mediaId) return null;
-      return meta.downloadMedia(mediaId);
-    },
+  console.warn(
+    "[wa-inbound]",
+    msg.waId,
+    msg.type,
+    msg.messageId,
+    (msg.body ?? "").slice(0, 80),
   );
-
-  if (result.reply) {
-    await meta.sendWhatsAppMessage(msg.waId, result.reply);
+  try {
+    await routeIncomingWhatsAppMessage(env, getMetaService(), msg);
+  } catch (error) {
+    console.error("[wa-inbound] router failed", error);
   }
 }

@@ -146,7 +146,7 @@ export function SubscribeButtonOrRegister({
 }: Omit<SubscribeButtonProps, "onSuccess">) {
   return (
     <ButtonLink
-      href={ROUTES.register}
+      href={`${ROUTES.register}?intent=trial`}
       className={cn(fullWidth && "w-full", className)}
       variant={variant}
     >

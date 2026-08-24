@@ -1,5 +1,9 @@
 import type { Env } from "../../config/env.js";
 import { getTodayJakarta } from "../../lib/datetime-jakarta.js";
+import {
+  claimSchedulerJob,
+  releaseSchedulerJob,
+} from "../../lib/scheduler-lock.js";
 import { checkSubscription } from "../../lib/subscription.js";
 import {
   googleConnectionRepository,
@@ -15,8 +19,6 @@ import {
 
 const REMINDER_HOUR_JAKARTA = 21;
 const TICK_MS = 30_000;
-
-let lastGlobalReminderDate: string | null = null;
 
 function getJakartaDateTime(): { date: string; hour: number; minute: number } {
   const now = new Date();
@@ -93,13 +95,17 @@ export function startEveningReminderScheduler(env: Env): void {
   setInterval(() => {
     const { date, hour, minute } = getJakartaDateTime();
     if (hour !== REMINDER_HOUR_JAKARTA || minute !== 0) return;
-    if (lastGlobalReminderDate === date) return;
-
-    lastGlobalReminderDate = date;
-    void runEveningReminders(env).catch((error) => {
-      console.error({ error }, "[wa-reminder] batch failed");
-      lastGlobalReminderDate = null;
-    });
+    const jobKey = `evening-reminder:${date}`;
+    void (async () => {
+      const claimed = await claimSchedulerJob(jobKey);
+      if (!claimed) return;
+      try {
+        await runEveningReminders(env);
+      } catch (error) {
+        console.error({ error }, "[wa-reminder] batch failed");
+        await releaseSchedulerJob(jobKey);
+      }
+    })();
   }, TICK_MS);
 
   console.info(

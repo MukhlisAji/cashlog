@@ -311,18 +311,14 @@ export function AnalyticsContent() {
   }
 
   if (needsOnboarding || !data || !insights || !analyticsView) {
-    const setupComplete = sheetConnected && whatsappConnected;
+    const showChatToBot = whatsappConnected;
     const whatsappReadyButSheetMissing = whatsappConnected && !sheetConnected;
-    const title = setupComplete
+    const title = showChatToBot
       ? "Belum ada transaksi"
-      : whatsappReadyButSheetMissing
-        ? "Selesaikan Google Sheet"
-        : "Mulai catat lewat WhatsApp";
-    const description = setupComplete
-      ? "Nomor WhatsApp dan Google Sheet sudah siap. Kirim transaksi pertama ke bot."
-      : whatsappReadyButSheetMissing
-        ? "Nomor WhatsApp kamu sudah terdaftar. Hubungkan akun Google agar Sheet transaksi bisa dibuat."
-        : "Daftarkan nomor WhatsApp kamu. Google Sheet akan dibuat otomatis, lalu transaksi pertama bisa langsung dicatat lewat chat.";
+      : "Mulai catat lewat WhatsApp";
+    const description = showChatToBot
+      ? "Nomor WhatsApp sudah terdaftar. Kirim transaksi pertama ke bot, misalnya: Beli kopi 20rb."
+      : "Daftarkan nomor WhatsApp kamu. Google Sheet akan dibuat otomatis, lalu transaksi pertama bisa langsung dicatat lewat chat.";
 
     return (
       <Card>
@@ -330,14 +326,25 @@ export function AnalyticsContent() {
           <CardTitle>{title}</CardTitle>
           <CardDescription>{description}</CardDescription>
         </CardHeader>
-        <CardContent>
-          {setupComplete ? (
-            <ChatToBotButton message="Beli kopi 20rb" />
+        <CardContent className="flex flex-col gap-2 sm:flex-row">
+          {showChatToBot ? (
+            <ChatToBotButton
+              message="Beli kopi 20rb"
+              variant="default"
+              className="w-fit bg-[#25D366] hover:bg-[#1ebe5a]"
+            />
           ) : (
             <Button size="sm" render={<Link href="/settings#whatsapp" />}>
-              {whatsappReadyButSheetMissing
-                ? "Hubungkan Google Sheet"
-                : "Daftarkan nomor WhatsApp"}
+              Daftarkan nomor WhatsApp
+            </Button>
+          )}
+          {whatsappReadyButSheetMissing && (
+            <Button
+              size="sm"
+              variant="outline"
+              render={<Link href="/settings#whatsapp" />}
+            >
+              Hubungkan Google Sheet
             </Button>
           )}
         </CardContent>

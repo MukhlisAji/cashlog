@@ -84,7 +84,7 @@ export async function sendWelcomeEmailIfNeeded(
 
   const sent = await sendEmail(env, {
     to: profile.email,
-    subject: `Selamat datang di cashlog.id — trial Pro ${trialDays} hari 🎉`,
+    subject: `Selamat datang di cashlog.id`,
     html: buildWelcomeEmailHtml({
       name,
       trialDays,

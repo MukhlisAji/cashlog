@@ -26,7 +26,7 @@ interface RegisterFormProps {
   redirectTo?: string;
 }
 
-export function RegisterForm({ redirectTo = "/ringkasan" }: RegisterFormProps) {
+export function RegisterForm({ redirectTo = "/" }: RegisterFormProps) {
   const { signInAsDemo, signUpWithPassword } = useAuth();
   const router = useRouter();
 
@@ -95,7 +95,7 @@ export function RegisterForm({ redirectTo = "/ringkasan" }: RegisterFormProps) {
           <p className="mt-2 text-sm text-muted-foreground">
             Kami kirim link verifikasi ke{" "}
             <span className="font-medium text-foreground">{checkEmail}</span>.
-            Setelah verifikasi, lanjut setup Google Sheet & WhatsApp.
+            Setelah verifikasi, daftarkan nomor WhatsApp untuk mengaktifkan pencatatan.
           </p>
         </div>
         <ButtonLink variant="outline" href="/login" className="w-full">

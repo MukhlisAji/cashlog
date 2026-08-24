@@ -9,8 +9,10 @@ import {
   Users,
 } from "lucide-react";
 
+import { SettingsSaveButton } from "@/components/settings/settings-save-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { showToast } from "@/components/ui/toaster";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +23,7 @@ import {
   HOUSEHOLD_MEMBER_PRICE,
   MAX_HOUSEHOLD_MEMBER_SLOTS,
 } from "@/lib/pricing";
+import { NOTICE_MESSAGES } from "@/lib/notice";
 import { householdService } from "@/services/household.service";
 
 function formatRupiah(amount: number): string {
@@ -31,7 +34,11 @@ function formatRupiah(amount: number): string {
   }).format(amount);
 }
 
-export function HouseholdMembersEditor() {
+export function HouseholdMembersEditor({
+  openAddOnMount = false,
+}: {
+  openAddOnMount?: boolean;
+}) {
   const { isPro, isTrial, canManageHousehold } = useSubscription();
   const { household, isLoading, refresh } = useHousehold();
   const [displayName, setDisplayName] = useState("");
@@ -44,7 +51,7 @@ export function HouseholdMembersEditor() {
   const [confirmSlotTarget, setConfirmSlotTarget] = useState<number | null>(null);
   const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
   const [confirmRevokeName, setConfirmRevokeName] = useState("");
-  const [showAddPanel, setShowAddPanel] = useState(false);
+  const [showAddPanel, setShowAddPanel] = useState(openAddOnMount);
 
   if (isLoading) {
     return (
@@ -141,12 +148,17 @@ export function HouseholdMembersEditor() {
 
     if (!result.success) {
       setError(result.error ?? "Gagal menambahkan anggota.");
+      showToast(
+        NOTICE_MESSAGES.save_failed.kind,
+        NOTICE_MESSAGES.save_failed.text,
+      );
       return;
     }
 
     setDisplayName("");
     setPhone("");
     setMessage(`${result.data?.displayName ?? "Anggota"} di-whitelist — chat ke bot akan masuk sheet yang sama.`);
+    showToast(NOTICE_MESSAGES.saved.kind, NOTICE_MESSAGES.saved.text);
     await refresh();
   }
 
@@ -266,32 +278,28 @@ export function HouseholdMembersEditor() {
 
             <div className="flex flex-col gap-2">
               <Label>Whitelist nomor anggota</Label>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Input
-                  placeholder="Nama (contoh: Istri)"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  disabled={loading || !household?.canInviteMember}
-                />
-                <Input
-                  placeholder="08xxxxxxxxxx"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  disabled={loading || !household?.canInviteMember}
-                />
-                <Button
-                  disabled={
-                    loading ||
-                    !household?.canInviteMember ||
-                    !displayName.trim() ||
-                    !phone.trim()
-                  }
-                  onClick={() => void handleAdd()}
-                >
-                  <UserPlus className="size-4" />
-                  Daftarkan
-                </Button>
-              </div>
+              <Input
+                placeholder="Nama (contoh: Istri)"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                disabled={loading || !household?.canInviteMember}
+              />
+              <Input
+                placeholder="08xxxxxxxxxx"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                disabled={loading || !household?.canInviteMember}
+              />
+              <SettingsSaveButton
+                loading={loading}
+                disabled={
+                  !household?.canInviteMember ||
+                  !displayName.trim() ||
+                  !phone.trim()
+                }
+                onClick={() => void handleAdd()}
+                label="Daftarkan"
+              />
               {!household?.canInviteMember && slotsPaid === 0 && (
                 <p className="text-xs text-muted-foreground">
                   Beli slot anggota dulu sebelum menambahkan.

@@ -16,7 +16,7 @@ export function buildWelcomeEmailHtml(options: {
 <body style="font-family: system-ui, sans-serif; line-height: 1.6; color: #111; max-width: 560px; margin: 0 auto; padding: 24px;">
   <h1 style="font-size: 20px; margin-bottom: 8px;">Selamat datang di ${BRAND} 🎉</h1>
   <p>Halo ${escapeHtml(name)},</p>
-  <p>Akun Anda sudah aktif dengan <strong>trial ${trialDays} hari</strong> — catat pengeluaran langsung dari WhatsApp, data tersimpan di Google Sheet milik Anda.</p>
+  <p>Akun Anda sudah dibuat. Mulai trial atau berlangganan dari halaman utama, lalu catat pengeluaran dari WhatsApp ke Google Sheet milik Anda.</p>
   <p style="margin: 24px 0;">
     <a href="${onboardingUrl}" style="display: inline-block; background: #16a34a; color: #fff; text-decoration: none; padding: 12px 20px; border-radius: 8px; font-weight: 600;">Buka pengaturan</a>
   </p>
@@ -46,7 +46,7 @@ export function buildWelcomeEmailText(options: {
     "",
     `Halo ${name},`,
     "",
-    `Akun Anda aktif dengan trial ${trialDays} hari.`,
+    `Akun Anda sudah dibuat. Mulai trial atau berlangganan dari halaman utama.`,
     "",
     `Pengaturan: ${onboardingUrl}`,
     `Dashboard: ${dashboardUrl}`,

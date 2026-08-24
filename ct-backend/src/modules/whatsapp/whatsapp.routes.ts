@@ -20,6 +20,7 @@ import {
   setupGoogleSheet,
 } from "../sheets/sheets-setup.service.js";
 import { createWhatsAppLinkCode } from "./wa-link-code.service.js";
+import { sendOnboardingTemplateToLeadIfReady } from "./wa-onboarding-template.service.js";
 import { parseIndonesianPhone } from "./whatsapp.utils.js";
 
 const registerPhoneSchema = z.object({
@@ -79,6 +80,7 @@ export async function whatsappRoutes(app: FastifyInstance, env: Env) {
       }
 
       const spreadsheet = await setupGoogleSheet(env, userId);
+      void sendOnboardingTemplateToLeadIfReady(env, userId);
       return {
         success: true,
         data: {

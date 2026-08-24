@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ROUTES } from "@/lib/constants";
+import { withNotice } from "@/lib/notice";
 import {
   consumePendingPaymentOrderId,
   subscriptionService,
@@ -43,6 +44,7 @@ export default function PaymentReturnPage() {
       setFailed(true);
       setIsWorking(false);
       setMessage("Pembayaran gagal atau dibatalkan.");
+      router.replace(withNotice(ROUTES.subscriptionExpired, "payment_failed"));
       return;
     }
 
@@ -61,7 +63,7 @@ export default function PaymentReturnPage() {
         const result = await subscriptionService.getStatus();
 
         if (result.success && result.data?.allowed) {
-          router.replace(ROUTES.dashboard);
+          router.replace(withNotice(ROUTES.dashboard, "payment_success"));
           return;
         }
 
@@ -84,6 +86,7 @@ export default function PaymentReturnPage() {
       setIsWorking(false);
       setFailed(true);
       setMessage("Gagal memverifikasi pembayaran. Silakan coba lagi.");
+      router.replace(withNotice(ROUTES.subscriptionExpired, "payment_failed"));
     });
   }, [payment, router]);
 

@@ -11,6 +11,7 @@ import {
 } from "./google-client.js";
 import { saveGoogleTokens } from "./sheets-connection.service.js";
 import { setupGoogleSheet, getSheetStatus } from "./sheets-setup.service.js";
+import { sendOnboardingTemplateToLeadIfReady } from "../whatsapp/wa-onboarding-template.service.js";
 
 export async function sheetsRoutes(app: FastifyInstance, env: Env) {
   app.get(
@@ -75,6 +76,7 @@ export async function sheetsRoutes(app: FastifyInstance, env: Env) {
         expiry_date: tokens.expiry_date ?? undefined,
       });
       await setupGoogleSheet(env, userId);
+      void sendOnboardingTemplateToLeadIfReady(env, userId);
 
       return reply.redirect(successRedirect.replace("sheet=authorized", "sheet=connected"));
     } catch (error) {
@@ -139,6 +141,7 @@ export async function sheetsRoutes(app: FastifyInstance, env: Env) {
 
       try {
         const result = await setupGoogleSheet(env, userId);
+        void sendOnboardingTemplateToLeadIfReady(env, userId);
         return { success: true, data: result };
       } catch (error) {
         request.log.error(error);

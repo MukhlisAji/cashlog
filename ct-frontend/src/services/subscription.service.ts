@@ -90,6 +90,24 @@ export const subscriptionService = {
     return response.json() as Promise<ApiResponse<SubscriptionStatusData>>;
   },
 
+  async startTrial() {
+    if (isDemoMode()) {
+      await demoDelay(400);
+      upgradeDemoSubscription("pro");
+      return { success: true, data: getMockSubscriptionStatus() };
+    }
+
+    const token = await getAccessToken();
+    if (!token) return { success: false, error: "Not authenticated" };
+
+    const response = await fetch(`${API_URL}/api/subscription/start-trial`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    return response.json() as Promise<ApiResponse<SubscriptionStatusData>>;
+  },
+
   async checkout(tier: SubscriptionTier) {
     if (isDemoMode()) {
       await demoDelay(500);

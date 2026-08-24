@@ -6,13 +6,13 @@ import { BudgetsEditor } from "@/components/settings/budgets-editor";
 import { CategoriesEditor } from "@/components/settings/categories-editor";
 import { HouseholdMembersEditor } from "@/components/settings/household-members-editor";
 import {
+  SETTINGS_SECTIONS,
   SettingsSidebar,
   useSettingsSectionSpy,
+  type SettingsSectionId,
 } from "@/components/settings/settings-sidebar";
 import { PaymentResultBanner } from "@/components/subscription/subscription-banners";
-import {
-  SubscribeButton,
-} from "@/components/subscription/subscribe-button";
+import { SubscribeButton } from "@/components/subscription/subscribe-button";
 import { siteConfig } from "@/config/site";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,11 @@ import {
 } from "@/components/ui/card";
 import { useSheetStatus } from "@/hooks/use-sheet-status";
 import { useSubscription } from "@/hooks/use-subscription";
+import { useWhatsAppStatus } from "@/hooks/use-whatsapp-status";
 import { LeadWhatsAppPhoneForm } from "@/components/settings/lead-whatsapp-phone-form";
+import { showToast } from "@/components/ui/toaster";
+import { NOTICE_MESSAGES } from "@/lib/notice";
+import { formatLongDate } from "@/lib/format";
 import { formatTierPrice, getTierLabel } from "@/lib/pricing";
 import { subscriptionService } from "@/services/subscription.service";
 
@@ -35,11 +39,13 @@ function SubscriptionCard() {
     isTrial,
     daysRemaining,
     trialDaysRemaining,
+    expiresAt,
     autoRenewal,
     refresh,
   } = useSubscription();
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelMessage, setCancelMessage] = useState<string | null>(null);
+  const expiresLabel = formatLongDate(expiresAt);
 
   let badge = "Trial";
   let description =
@@ -47,9 +53,21 @@ function SubscriptionCard() {
 
   if (isPro && !isTrial) {
     badge = getTierLabel("pro");
-    description = `${getTierLabel("pro")} aktif${daysRemaining !== null ? ` · ${daysRemaining} hari tersisa` : ""}`;
+    description = [
+      `${getTierLabel("pro")} aktif`,
+      daysRemaining !== null ? `${daysRemaining} hari tersisa` : null,
+      expiresLabel ? `berakhir ${expiresLabel}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
   } else if (isTrial) {
-    description = `Trial ${getTierLabel("pro")}${trialDaysRemaining !== null ? ` · ${trialDaysRemaining} hari tersisa` : ""}`;
+    description = [
+      `Trial ${getTierLabel("pro")}`,
+      trialDaysRemaining !== null ? `${trialDaysRemaining} hari tersisa` : null,
+      expiresLabel ? `berakhir ${expiresLabel}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
   }
 
   async function handleCancelRenewal() {
@@ -75,9 +93,11 @@ function SubscriptionCard() {
         <Badge variant={isPro || isTrial ? "default" : "secondary"}>{badge}</Badge>
       </CardHeader>
       {(!isPro || isTrial) && (
-        <CardContent className="flex flex-col gap-2 sm:flex-row">
+        <CardContent className="flex flex-col gap-2">
           <SubscribeButton
             tier="pro"
+            fullWidth
+            className="h-10"
             label={`${getTierLabel("pro")} ${formatTierPrice("pro")}/bln`}
             onSuccess={() => void refresh()}
           />
@@ -87,8 +107,12 @@ function SubscriptionCard() {
         <CardContent className="flex flex-col gap-3 border-t pt-4">
           <p className="text-xs text-muted-foreground">
             {autoRenewal
-              ? "Langganan diperpanjang otomatis setiap bulan via Midtrans."
-              : "Perpanjangan otomatis tidak aktif — langganan berakhir pada tanggal di atas."}
+              ? expiresLabel
+                ? `Perpanjangan otomatis aktif. Tagihan berikutnya sekitar ${expiresLabel}.`
+                : "Langganan diperpanjang otomatis setiap bulan via Midtrans."
+              : expiresLabel
+                ? `Perpanjangan otomatis tidak aktif — akses berakhir ${expiresLabel}.`
+                : "Perpanjangan otomatis tidak aktif."}
           </p>
           {autoRenewal && (
             <Button
@@ -117,12 +141,38 @@ export default function SettingsPage() {
     hasToken: sheetHasToken,
     refresh: refreshSheet,
   } = useSheetStatus();
+  const { isConnected: waConnected } = useWhatsAppStatus();
   const [catVersion, setCatVersion] = useState(0);
-  const activeSection = useSettingsSectionSpy();
+  const [inviteFamily, setInviteFamily] = useState(false);
+  const leadOnboarded = (sheetConnected && waConnected) || inviteFamily;
+
+  const sectionIds = SETTINGS_SECTIONS.map((s) => s.id).filter((id) =>
+    id === "anggota-keluarga" ? leadOnboarded : true,
+  ) as SettingsSectionId[];
+  const activeSection = useSettingsSectionSpy(sectionIds);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("focus") !== "whatsapp") return;
+    const fromSheetOauth = params.get("sheet") === "connected";
+    const focusWhatsApp = params.get("focus") === "whatsapp";
+
+    if (fromSheetOauth) {
+      params.delete("sheet");
+      const query = params.toString();
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${query ? `?${query}` : ""}`,
+      );
+      setInviteFamily(true);
+      showToast(
+        NOTICE_MESSAGES.sheet_connected.kind,
+        NOTICE_MESSAGES.sheet_connected.text,
+      );
+      return;
+    }
+
+    if (!focusWhatsApp) return;
 
     params.delete("focus");
     const query = params.toString();
@@ -135,6 +185,15 @@ export default function SettingsPage() {
       document.getElementById("whatsapp")?.scrollIntoView({ behavior: "smooth" });
     });
   }, []);
+
+  useEffect(() => {
+    if (!inviteFamily || !leadOnboarded) return;
+    requestAnimationFrame(() => {
+      document
+        .getElementById("anggota-keluarga")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [inviteFamily, leadOnboarded]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -150,7 +209,7 @@ export default function SettingsPage() {
       </Suspense>
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-10">
-        <SettingsSidebar activeId={activeSection} />
+        <SettingsSidebar activeId={activeSection} sectionIds={sectionIds} />
 
         <div className="flex min-w-0 flex-1 flex-col gap-6">
           <section id="langganan" className="scroll-mt-24">
@@ -163,8 +222,8 @@ export default function SettingsPage() {
                 <div>
                   <CardTitle className="text-lg font-bold">Aktifkan Pencatatan WhatsApp</CardTitle>
                   <CardDescription>
-                    Cukup daftarkan nomor. Sistem otomatis meminta izin Google,
-                    membuat Sheet, dan menautkan WhatsApp dalam satu proses.
+                    Isi nomor WhatsApp, lalu tekan Simpan & Aktifkan.
+                    Google Sheet dibuat otomatis jika izin sudah diberikan saat login.
                   </CardDescription>
                 </div>
                 <Badge variant={sheetConnected ? "default" : "secondary"}>
@@ -187,6 +246,13 @@ export default function SettingsPage() {
                   sheetConnected={sheetConnected}
                   sheetHasToken={sheetHasToken}
                   refreshSheet={refreshSheet}
+                  onOnboarded={() => {
+                    setInviteFamily(true);
+                    showToast(
+                      NOTICE_MESSAGES.linked.kind,
+                      NOTICE_MESSAGES.linked.text,
+                    );
+                  }}
                 />
                 {sheetStatus?.spreadsheetUrl && (
                   <Button
@@ -210,20 +276,22 @@ export default function SettingsPage() {
             </Card>
           </section>
 
+          {leadOnboarded ? (
           <section id="anggota-keluarga" className="scroll-mt-24">
             <Card>
               <CardHeader className="border-b bg-muted/20">
                 <CardTitle className="text-lg font-bold">Anggota Keluarga</CardTitle>
                 <CardDescription>
-                  {getTierLabel("pro")} only — add-on maks 5 nomor. Nomor yang di-whitelist
-                  menulis ke Sheet yang sama.
+                  Pencatatan kamu sudah aktif. Tambah nomor istri/anak agar mereka
+                  menulis ke Google Sheet yang sama (add-on, maks 5).
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <HouseholdMembersEditor />
+                <HouseholdMembersEditor openAddOnMount={inviteFamily} />
               </CardContent>
             </Card>
           </section>
+          ) : null}
 
           <section id="kategori" className="scroll-mt-24">
             <Card>

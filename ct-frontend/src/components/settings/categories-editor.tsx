@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Crown, Loader2, Plus, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Crown, Loader2, Plus, X } from "lucide-react";
 
+import { SettingsSaveButton } from "@/components/settings/settings-save-button";
 import { UpgradeProButton } from "@/components/subscription/upgrade-pro-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { showToast } from "@/components/ui/toaster";
 import { useSubscription } from "@/hooks/use-subscription";
+import { NOTICE_MESSAGES } from "@/lib/notice";
 import {
   categoriesService,
   type Category,
@@ -19,17 +21,18 @@ interface CategoriesEditorProps {
 
 export function CategoriesEditor({ onChange }: CategoriesEditorProps) {
   const { canManageCategories } = useSubscription();
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [saved, setSaved] = useState<Category[]>([]);
+  const [draft, setDraft] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [savingId, setSavingId] = useState<number | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [newName, setNewName] = useState("");
-  const [isAdding, setIsAdding] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [nextTempId, setNextTempId] = useState(-1);
 
   const load = useCallback(async () => {
     const result = await categoriesService.list();
     if (result.success && result.data) {
-      setCategories(result.data);
+      setSaved(result.data);
+      setDraft(result.data);
     }
     setIsLoading(false);
   }, []);
@@ -38,43 +41,95 @@ export function CategoriesEditor({ onChange }: CategoriesEditorProps) {
     void load();
   }, [load]);
 
-  async function handleSaveKeywords(cat: Category, keywords: string) {
-    setSavingId(cat.id);
-    const result = await categoriesService.update(cat.id, { keywords });
-    if (result.success && result.data) {
-      setCategories((prev) =>
-        prev.map((c) => (c.id === cat.id ? result.data! : c)),
-      );
-    }
-    setSavingId(null);
-  }
+  const dirty = useMemo(() => {
+    const savedIds = saved.map((c) => c.id).sort().join(",");
+    const draftIds = draft.map((c) => c.id).sort().join(",");
+    if (savedIds !== draftIds) return true;
+    return draft.some((c) => {
+      if (c.id < 0) return true;
+      const original = saved.find((s) => s.id === c.id);
+      return original?.name !== c.name;
+    });
+  }, [draft, saved]);
 
-  async function handleAdd() {
+  function addChip() {
     const name = newName.trim();
     if (!name) return;
-
-    setIsAdding(true);
-    setError(null);
-    const result = await categoriesService.create(name);
-    if (result.success && result.data) {
-      setCategories((prev) => [...prev, result.data!]);
-      setNewName("");
-      onChange?.();
-    } else {
-      setError(result.error ?? "Gagal menambah kategori");
+    const exists = draft.some(
+      (c) => c.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (exists) {
+      showToast("error", "Kategori itu sudah ada.");
+      return;
     }
-    setIsAdding(false);
+    setDraft((prev) => [
+      ...prev,
+      {
+        id: nextTempId,
+        user_id: "",
+        name,
+        keywords: name.toLowerCase(),
+        color: null,
+        sort_order: prev.length,
+      },
+    ]);
+    setNextTempId((id) => id - 1);
+    setNewName("");
   }
 
-  async function handleRemove(cat: Category) {
-    setError(null);
-    const result = await categoriesService.remove(cat.id);
-    if (result.success) {
-      setCategories((prev) => prev.filter((c) => c.id !== cat.id));
-      onChange?.();
-    } else {
-      setError(result.error ?? "Gagal menghapus kategori");
+  function resetDraft() {
+    setDraft(saved);
+    setNewName("");
+  }
+
+  function removeChip(cat: Category) {
+    if (draft.length <= 1) {
+      showToast("error", "Minimal satu kategori harus tersisa.");
+      return;
     }
+    setDraft((prev) => prev.filter((c) => c.id !== cat.id));
+  }
+
+  async function handleSave() {
+    if (!canManageCategories) return;
+    setIsSaving(true);
+
+    const draftPersisted = draft.filter((c) => c.id > 0);
+    const draftPersistedIds = new Set(draftPersisted.map((c) => c.id));
+    const toDelete = saved.filter((c) => !draftPersistedIds.has(c.id));
+    const toCreate = draft.filter((c) => c.id < 0);
+
+    let failed = false;
+    for (const cat of toDelete) {
+      const result = await categoriesService.remove(cat.id);
+      if (!result.success) {
+        failed = true;
+        break;
+      }
+    }
+    if (!failed) {
+      for (const cat of toCreate) {
+        const result = await categoriesService.create(cat.name, cat.keywords ?? undefined);
+        if (!result.success) {
+          failed = true;
+          break;
+        }
+      }
+    }
+
+    if (failed) {
+      showToast(
+        NOTICE_MESSAGES.save_failed.kind,
+        NOTICE_MESSAGES.save_failed.text,
+      );
+      setIsSaving(false);
+      return;
+    }
+
+    await load();
+    onChange?.();
+    showToast(NOTICE_MESSAGES.saved.kind, NOTICE_MESSAGES.saved.text);
+    setIsSaving(false);
   }
 
   if (isLoading) {
@@ -86,7 +141,7 @@ export function CategoriesEditor({ onChange }: CategoriesEditorProps) {
     );
   }
 
-  if (categories.length === 0) {
+  if (saved.length === 0 && draft.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
         Hubungkan Google Sheet terlebih dahulu untuk mengaktifkan kategori.
@@ -98,7 +153,7 @@ export function CategoriesEditor({ onChange }: CategoriesEditorProps) {
     <div className="flex flex-col gap-4">
       <p className="text-xs text-muted-foreground">
         {canManageCategories
-          ? "Kelola kategori sesuai kebutuhan keluarga. Kategori yang dihapus tidak muncul di budget & chart bulan ini."
+          ? "Tambah atau silang kategori. Perubahan diterapkan setelah kamu simpan."
           : "Langganan tidak aktif. Aktifkan langganan untuk mengelola kategori."}
       </p>
 
@@ -112,82 +167,78 @@ export function CategoriesEditor({ onChange }: CategoriesEditorProps) {
         </div>
       )}
 
-      {error && (
-        <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </p>
-      )}
-
-      {categories.map((cat) => (
-        <div
-          key={cat.id}
-          className="flex flex-col gap-1.5 rounded-lg border bg-muted/20 p-3"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <Label htmlFor={`cat-${cat.id}`} className="flex items-center gap-2">
-              {cat.color && (
-                <span
-                  className="size-2.5 rounded-full"
-                  style={{ backgroundColor: cat.color }}
-                />
-              )}
-              {cat.name}
-            </Label>
-            <Button
+      <div className="flex flex-wrap items-center gap-2">
+        {draft.map((cat) => (
+          <span
+            key={cat.id}
+            className="inline-flex items-center gap-1.5 rounded-full border bg-muted/40 py-1 pl-3 pr-1 text-sm"
+          >
+            {cat.color ? (
+              <span
+                className="size-2 shrink-0 rounded-full"
+                style={{ backgroundColor: cat.color }}
+              />
+            ) : null}
+            {cat.name}
+            <button
               type="button"
-              variant="ghost"
-              size="icon-xs"
-              className="text-muted-foreground hover:text-destructive"
-              disabled={!canManageCategories || categories.length <= 1}
-              onClick={() => void handleRemove(cat)}
+              className="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+              disabled={!canManageCategories || draft.length <= 1}
+              onClick={() => removeChip(cat)}
               aria-label={`Hapus ${cat.name}`}
             >
-              <Trash2 className="size-3.5" />
-            </Button>
-          </div>
-          <div className="flex gap-2">
+              <X className="size-3.5" />
+            </button>
+          </span>
+        ))}
+        {canManageCategories ? (
+          <div className="inline-flex h-8 min-w-[10rem] flex-1 items-center gap-1 rounded-full border border-dashed bg-background px-2 sm:flex-none">
             <Input
-              id={`cat-${cat.id}`}
-              defaultValue={cat.keywords ?? ""}
-              placeholder="kopi, makan, warung"
-              onBlur={(e) => {
-                if (e.target.value !== (cat.keywords ?? "")) {
-                  void handleSaveKeywords(cat, e.target.value);
+              className="h-7 min-w-0 flex-1 border-0 bg-transparent px-2 shadow-none focus-visible:ring-0"
+              placeholder="Tambah kategori"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addChip();
                 }
               }}
             />
-            {savingId === cat.id && (
-              <Loader2 className="size-4 shrink-0 animate-spin self-center" />
-            )}
-          </div>
-        </div>
-      ))}
-
-      {canManageCategories && (
-        <div className="flex gap-2">
-          <Input
-            placeholder="Nama kategori baru, mis. Tabungan"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void handleAdd();
-            }}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!newName.trim() || isAdding}
-            onClick={() => void handleAdd()}
-          >
-            {isAdding ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
+            <button
+              type="button"
+              className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+              disabled={!newName.trim()}
+              onClick={addChip}
+              aria-label="Tambah kategori"
+            >
               <Plus className="size-4" />
-            )}
-            Tambah
-          </Button>
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      {canManageCategories ? (
+        <div className="flex flex-col gap-2">
+          {dirty ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 w-full"
+              disabled={isSaving}
+              onClick={resetDraft}
+            >
+              Reset
+            </Button>
+          ) : null}
+          <SettingsSaveButton
+            onClick={() => void handleSave()}
+            loading={isSaving}
+            disabled={!dirty}
+            label="Simpan"
+          />
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

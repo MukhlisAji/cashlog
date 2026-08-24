@@ -37,7 +37,7 @@ interface GoogleSignInButtonProps {
 }
 
 export function GoogleSignInButton({
-  redirectTo = "/ringkasan",
+  redirectTo = "/",
   label = "Masuk dengan Google",
   className,
 }: GoogleSignInButtonProps) {

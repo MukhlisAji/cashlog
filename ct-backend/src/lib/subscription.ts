@@ -92,20 +92,6 @@ export async function checkSubscription(
 ): Promise<SubscriptionCheck> {
   let profile = await getUserProfile(userId);
 
-  // Auto-start/reset trial for users who have never had an active subscription:
-  //   1) no profile row at all,
-  //   2) profile with "free" status and no expiration,
-  //   3) profile with "expired" status but no expiration (created incomplete and never had a trial).
-  const neverHadActive =
-    !profile ||
-    (profile.subscription_status === "free" && !profile.subscription_expires_at) ||
-    (profile.subscription_status === "expired" && !profile.subscription_expires_at);
-  const needsTrial = neverHadActive;
-  if (needsTrial) {
-    await startTrialForUser(userId);
-    profile = (await getUserProfile(userId)) ?? profile;
-  }
-
   if (!profile) {
     return {
       allowed: false,
@@ -126,6 +112,23 @@ export async function checkSubscription(
   await expireIfNeeded(userId, profile);
   profile = (await getUserProfile(userId)) ?? profile;
 
+  if (!profile) {
+    return {
+      allowed: false,
+      status: "expired",
+      tier: null,
+      expiresAt: null,
+      daysRemaining: null,
+      trialDaysRemaining: null,
+      canAccessAnalytics: false,
+      canUseReceiptOcr: false,
+      canManageCategories: false,
+      canManageHousehold: false,
+      isTrial: false,
+      isPro: false,
+    };
+  }
+
   let status = profile.subscription_status as SubscriptionStatus | "free";
   let tier = profile.subscription_tier;
   const expiresAt = profile.subscription_expires_at;
@@ -143,56 +146,6 @@ export async function checkSubscription(
     !!expiresAt &&
     new Date(expiresAt).getTime() > Date.now();
 
-  // Fallback: jika masih not allowed (profile bermasalah / belum pernah
-  // di-set dengan benar), coba start trial sekali lagi. Ini menyelamatkan
-  // user yang profile-nya terlanjur "expired" / "free" tanpa data
-  // langganan yang jelas — misalnya karena bug trigger Supabase / race.
-  if (!allowed) {
-    // eslint-disable-next-line no-console
-    console.log(
-      `[checkSubscription] user=${userId} not allowed (status=${status}, expiresAt=${expiresAt ?? "null"}). Retrying startTrialForUser…`,
-    );
-    const retry = await startTrialForUser(userId);
-    if (retry.ok) {
-      profile = await getUserProfile(userId);
-      if (profile) {
-        status = profile.subscription_status as SubscriptionStatus | "free";
-        tier = profile.subscription_tier;
-        const newExpiresAt = profile.subscription_expires_at;
-
-        if (status === "free") {
-          status = "expired";
-          tier = null;
-        }
-
-        const newDaysRemaining = computeDaysRemaining(newExpiresAt);
-        const newIsTrial = status === "trial";
-        const newAllowed =
-          (status === "trial" || status === "active") &&
-          !!newExpiresAt &&
-          new Date(newExpiresAt).getTime() > Date.now();
-
-        const newProEntitlements = newAllowed && hasProEntitlements(status, tier);
-        const newIsPro = newAllowed && (newIsTrial || (status === "active" && tier === "pro"));
-
-        return {
-          allowed: newAllowed,
-          status: newAllowed ? status : "expired",
-          tier: newAllowed ? (newIsTrial ? "pro" : tier) : null,
-          expiresAt: newAllowed ? newExpiresAt : null,
-          daysRemaining: newAllowed ? newDaysRemaining : null,
-          trialDaysRemaining: newIsTrial ? newDaysRemaining : null,
-          canAccessAnalytics: newProEntitlements,
-          canUseReceiptOcr: newProEntitlements,
-          canManageCategories: newProEntitlements,
-          canManageHousehold: newProEntitlements,
-          isTrial: newIsTrial,
-          isPro: newIsPro,
-        };
-      }
-    }
-  }
-
   const proEntitlements = allowed && hasProEntitlements(status, tier);
   const isPro = allowed && (isTrial || (status === "active" && tier === "pro"));
 
@@ -200,7 +153,7 @@ export async function checkSubscription(
     allowed,
     status: allowed ? status : "expired",
     tier: allowed ? (isTrial ? "pro" : tier) : null,
-    expiresAt: allowed ? expiresAt : null,
+    expiresAt: allowed ? expiresAt : expiresAt,
     daysRemaining: allowed ? daysRemaining : null,
     trialDaysRemaining,
     canAccessAnalytics: proEntitlements,
@@ -214,13 +167,39 @@ export async function checkSubscription(
 
 export async function startTrialForUser(
   userId: string,
-): Promise<{ ok: boolean; expiresAt: string | null; errorMessage?: string }> {
+): Promise<{
+  ok: boolean;
+  expiresAt: string | null;
+  errorMessage?: string;
+  errorCode?: "TRIAL_ALREADY_USED" | "TRIAL_FAILED";
+}> {
   const supabase = getSupabaseAdmin();
-  if (!supabase) return { ok: false, expiresAt: null, errorMessage: "Supabase admin not configured" };
+  if (!supabase) {
+    return {
+      ok: false,
+      expiresAt: null,
+      errorMessage: "Supabase admin not configured",
+      errorCode: "TRIAL_FAILED",
+    };
+  }
 
-  // Pull user identity from auth.users so we can fill NOT NULL columns
-  // (full_name, email) on the profiles row when creating a fresh one.
-  // Without this, upsert fails with NOT NULL violation for brand new users.
+  const existing = await getUserProfile(userId);
+  if (existing?.subscription_expires_at) {
+    const stillValid =
+      (existing.subscription_status === "trial" ||
+        existing.subscription_status === "active") &&
+      new Date(existing.subscription_expires_at).getTime() > Date.now();
+    if (stillValid) {
+      return { ok: true, expiresAt: existing.subscription_expires_at };
+    }
+    return {
+      ok: false,
+      expiresAt: existing.subscription_expires_at,
+      errorMessage: "Trial sudah pernah digunakan. Silakan berlangganan.",
+      errorCode: "TRIAL_ALREADY_USED",
+    };
+  }
+
   let fullName: string | null = null;
   let email: string | null = null;
   try {
@@ -229,7 +208,7 @@ export async function startTrialForUser(
     if (!authErr && authUser?.user) {
       email = authUser.user.email ?? null;
       const meta = authUser.user.user_metadata as
-        | { full_name?: string; name?: string } 
+        | { full_name?: string; name?: string }
         | undefined;
       fullName =
         meta?.full_name ??
@@ -237,7 +216,6 @@ export async function startTrialForUser(
         (email ? email.split("@")[0]! : null);
     }
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.warn(
       `[startTrialForUser] could not fetch auth user=${userId}:`,
       err instanceof Error ? err.message : err,
@@ -249,8 +227,6 @@ export async function startTrialForUser(
   expiresAt.setDate(expiresAt.getDate() + trialDays);
   const now = new Date().toISOString();
 
-  // Use upsert so new users (no profile row) get a row created.
-  // The id column must match auth.users.id (primary key on profiles).
   const { error } = await supabase
     .from("profiles")
     .upsert(
@@ -269,18 +245,13 @@ export async function startTrialForUser(
     );
 
   if (error) {
-    // eslint-disable-next-line no-console
     console.error(
       `[startTrialForUser] upsert FAILED user=${userId} cols={full_name:${fullName}, email:${email}}:`,
       error,
     );
-    return { ok: false, expiresAt: null, errorMessage: error.message };
+    return { ok: false, expiresAt: null, errorMessage: error.message, errorCode: "TRIAL_FAILED" };
   }
 
-  // eslint-disable-next-line no-console
-  console.log(
-    `[startTrialForUser] SUCCESS user=${userId} expiresAt=${expiresAt.toISOString()}`,
-  );
   return { ok: true, expiresAt: expiresAt.toISOString() };
 }
 

@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Lock } from "lucide-react";
 import { isDemoMode } from "@/lib/demo";
+import { ROUTES } from "@/lib/constants";
 import { TRIAL_DAYS } from "@/lib/pricing";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 
@@ -20,22 +21,26 @@ export const metadata = {
 };
 
 interface RegisterPageProps {
-  searchParams: Promise<{ redirect?: string }>;
+  searchParams: Promise<{ redirect?: string; intent?: string }>;
 }
 
-function getRegisterDescription() {
+function getRegisterDescription(wantsTrial: boolean) {
   if (isDemoMode()) {
     return "Mode demo — jelajahi UI tanpa Supabase atau backend";
   }
   if (!isSupabaseConfigured()) {
     return "Supabase belum dikonfigurasi — gunakan Coba Demo";
   }
-  return `Daftar gratis — trial Pro ${TRIAL_DAYS} hari, data di Google Sheet Anda`;
+  if (wantsTrial) {
+    return `Mulai trial Pro ${TRIAL_DAYS} hari — data di Google Sheet Anda`;
+  }
+  return "Buat akun. Trial hanya aktif jika Anda memilih Coba Gratis.";
 }
 
 export default async function RegisterPage({ searchParams }: RegisterPageProps) {
   const params = await searchParams;
-  const redirectTo = params.redirect ?? "/ringkasan";
+  const wantsTrial = params.intent === "trial";
+  const redirectTo = params.redirect ?? (wantsTrial ? ROUTES.trial : ROUTES.home);
 
   return (
     <div className="w-full max-w-sm">
@@ -44,7 +49,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
       <Card>
         <CardHeader>
           <CardTitle>Buat akun</CardTitle>
-          <CardDescription>{getRegisterDescription()}</CardDescription>
+          <CardDescription>{getRegisterDescription(wantsTrial)}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <RegisterForm redirectTo={redirectTo} />

@@ -23,6 +23,7 @@ import {
   clearMidtransSubscription,
   getUserIdByMidtransSubscriptionId,
   getUserProfile,
+  startTrialForUser,
   updateMidtransSubscriptionId,
 } from "../../lib/subscription.js";
 import type { SubscriptionTier } from "../../lib/subscription.constants.js";
@@ -136,6 +137,29 @@ export async function subscriptionRoutes(app: FastifyInstance, env: Env) {
           ...sub,
           autoRenewal: !!profile?.midtrans_subscription_id,
         },
+      };
+    },
+  );
+
+  app.post(
+    "/subscription/start-trial",
+    { preHandler: authOnly },
+    async (request, reply) => {
+      const { userId } = request as AuthenticatedRequest;
+      const result = await startTrialForUser(userId);
+      if (!result.ok) {
+        const alreadyUsed = result.errorCode === "TRIAL_ALREADY_USED";
+        return reply.code(alreadyUsed ? 409 : 400).send({
+          success: false,
+          error: result.errorMessage ?? "Gagal mengaktifkan trial.",
+          code: result.errorCode ?? "TRIAL_FAILED",
+        });
+      }
+      const sub = await checkSubscription(userId);
+      return {
+        success: true,
+        data: sub,
+        message: "Trial Pro aktif.",
       };
     },
   );

@@ -2,13 +2,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 
 import type { Env } from "../../config/env.js";
 import { isMetaWhatsAppConfigured } from "../../config/env.js";
-import { checkSubscription } from "../../lib/subscription.js";
-import { householdRepository } from "../household/household.repository.js";
-import { replyForUnlinkedUser } from "./wa-welcome.js";
-import {
-  claimWhatsAppLinkCode,
-  parseWhatsAppLinkCode,
-} from "./wa-link-code.service.js";
+import { verifyMetaWebhookSignature } from "../../lib/meta-webhook-signature.js";
 import {
   MetaService,
   type MetaIncomingMessageEnvelope,
@@ -50,123 +44,6 @@ export class MetaWhatsAppController {
 
   metaService(): MetaService {
     return this.#meta;
-  }
-
-  /**
-   * "Bouncer" — authorization gate for every incoming Meta message.
-   *
-   * Contract: this method MUST NOT throw (caller already ACK'd Meta 200 OK).
-   * Any error is swallowed and logged; we err on the side of allowing the
-   * handlers to run later unless we positively identify the user as
-   * unregistered / expired.
-   *
-   * Returns `true` if the user passed the gate (authorized) and the caller
-   * should continue to downstream subscribers (LLM / parser).
-   * Returns `false` if the caller MUST short-circuit (replied already).
-   */
-  async #runAuthorizationBouncer(
-    request: FastifyRequest,
-    msg: MetaIncomingMessageEnvelope,
-  ): Promise<boolean> {
-    const linkCode = parseWhatsAppLinkCode(msg.body);
-    if (linkCode) {
-      try {
-        const userId = await claimWhatsAppLinkCode(linkCode, msg.waId);
-        await this.#meta.sendWhatsAppMessage(
-          msg.waId,
-          userId
-            ? "✅ Nomor WhatsApp berhasil ditautkan. Sekarang kirim transaksi, misalnya: kopi 25rb"
-            : "❌ Kode tidak valid, sudah dipakai, kedaluwarsa, atau nomor ini terdaftar di akun lain. Buat kode baru di Pengaturan.",
-        );
-      } catch (err) {
-        request.log.error(
-          { waId: msg.waId, err },
-          "[meta-webhook][link] failed to claim link code",
-        );
-        await this.#meta.sendWhatsAppMessage(
-          msg.waId,
-          "⚠️ Gagal menautkan nomor. Coba buat kode baru di Pengaturan.",
-        );
-      }
-      return false;
-    }
-
-    let ctx;
-    try {
-      ctx = await householdRepository.getActiveByPhone(msg.waId);
-    } catch (err) {
-      request.log.error(
-        {
-          waId: msg.waId,
-          messageId: msg.messageId,
-          err: err instanceof Error ? err : String(err),
-        },
-        "[meta-webhook][bouncer] whitelist lookup failed — sending welcome to avoid silent drop",
-      );
-      try {
-        await this.#meta.sendWhatsAppMessage(msg.waId, replyForUnlinkedUser(msg.body));
-      } catch {
-        // ignore send failure
-      }
-      return false;
-    }
-
-    if (!ctx) {
-      request.log.info(
-        { waId: msg.waId, messageId: msg.messageId },
-        "[meta-webhook][bouncer] first/unknown WA — welcome",
-      );
-      try {
-        await this.#meta.sendWhatsAppMessage(msg.waId, replyForUnlinkedUser(msg.body));
-      } catch (err) {
-        request.log.error(
-          {
-            waId: msg.waId,
-            err: err instanceof Error ? err : String(err),
-          },
-          "[meta-webhook][bouncer] failed to send welcome",
-        );
-      }
-      return false;
-    }
-
-    const sub = await checkSubscription(ctx.leadUserId);
-    if (!sub.allowed) {
-      request.log.info(
-        {
-          waId: msg.waId,
-          userId: ctx.leadUserId,
-          messageId: msg.messageId,
-        },
-        "[meta-webhook][bouncer] subscription not allowed",
-      );
-      try {
-        await this.#meta.sendWhatsAppMessage(
-          msg.waId,
-          "Masa aktif langganan sudah habis. Perpanjang di cashlog.id/settings untuk lanjut mencatat.",
-        );
-      } catch (err) {
-        request.log.error(
-          {
-            waId: msg.waId,
-            err: err instanceof Error ? err : String(err),
-          },
-          "[meta-webhook][bouncer] failed to send expired reply",
-        );
-      }
-      return false;
-    }
-
-    request.log.info(
-      {
-        waId: msg.waId,
-        userId: ctx.leadUserId,
-        memberId: ctx.memberId,
-        messageId: msg.messageId,
-      },
-      "[meta-webhook][bouncer] whitelisted — proceed",
-    );
-    return true;
   }
 
   /**
@@ -239,7 +116,7 @@ export class MetaWhatsAppController {
    * POST /webhook — Receive a Meta webhook delivery.
    *
    * GUARANTEED BY DESIGN (see module docstring at the top of this file):
-   *   1. We validate that the sender is Meta (configured token) + object field.
+   *   1. We validate X-Hub-Signature-256 when META_APP_SECRET is set.
    *   2. We FLUSH the HTTP 200 OK response FIRST before any async work.
    *      If we delay even by a few 100ms too much, Meta retries and we
    *      double-process messages (dedup lives in the parser layer).
@@ -249,6 +126,29 @@ export class MetaWhatsAppController {
    * of them throws, the webhook itself is unaffected. We already sent 200.
    */
   receiveWebhook(request: FastifyRequest, reply: FastifyReply): FastifyReply {
+    const appSecret = this.#env.META_APP_SECRET;
+    const requireSignature =
+      this.#env.NODE_ENV === "production" || Boolean(appSecret);
+
+    if (requireSignature) {
+      if (!appSecret) {
+        request.log.error(
+          "[meta-webhook] META_APP_SECRET missing; rejecting POST",
+        );
+        return reply.code(503).send({ error: "Webhook signature not configured" });
+      }
+      const rawBody = request.rawBody ?? "";
+      const signature = request.headers["x-hub-signature-256"];
+      if (!verifyMetaWebhookSignature(appSecret, rawBody, signature)) {
+        request.log.warn("[meta-webhook] invalid X-Hub-Signature-256");
+        return reply.code(403).send({ error: "Invalid webhook signature" });
+      }
+    } else {
+      request.log.warn(
+        "[meta-webhook] META_APP_SECRET unset; skipping signature check (dev only)",
+      );
+    }
+
     if (!isMetaWhatsAppConfigured(this.#env)) {
       request.log.warn(
         "[meta-webhook] Meta not configured; dropping POST webhook",
@@ -256,6 +156,11 @@ export class MetaWhatsAppController {
       // ACK so Meta does not retry at us until the operator fixes env.
       return reply.code(200).send();
     }
+
+    request.log.warn(
+      { url: request.url, contentType: request.headers["content-type"] },
+      "[meta-webhook] POST received",
+    );
 
     const body = request.body;
     if (!body || typeof body !== "object") {
@@ -314,13 +219,13 @@ export class MetaWhatsAppController {
     const statusesCount = parsed.statuses.length;
 
     if (messagesCount === 0 && statusesCount === 0) {
-      request.log.debug(
+      request.log.warn(
         "[meta-webhook] payload parsed — no actionable messages/statuses",
       );
       return;
     }
 
-    request.log.info(
+    request.log.warn(
       { messages: messagesCount, statuses: statusesCount },
       "[meta-webhook] dispatching parsed events",
     );
@@ -328,27 +233,6 @@ export class MetaWhatsAppController {
     const onMsg = this.#handlers.onMessage;
     if (onMsg) {
       for (const msg of parsed.messages) {
-        // Bouncer (authorization gate) runs BEFORE any downstream parser/LLM.
-        // If it returns false, the method already replied to the user; do NOT
-        // pass the message to subscribers.
-        try {
-          const authorized = await this.#runAuthorizationBouncer(request, msg);
-          if (!authorized) continue;
-        } catch (err) {
-          // Defensive: bouncer itself has internal try/catch but keep this
-          // outer belt-and-suspenders — NEVER block the async dispatch loop
-          // because of a single bad message (Meta's 200 already sent).
-          request.log.error(
-            {
-              waId: msg.waId,
-              messageId: msg.messageId,
-              err: err instanceof Error ? err : String(err),
-            },
-            "[meta-webhook] bouncer threw unexpectedly — skipping message",
-          );
-          continue;
-        }
-
         try {
           await onMsg(msg);
         } catch (err) {

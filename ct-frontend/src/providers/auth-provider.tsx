@@ -59,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInAsDemo = useCallback((redirectTo?: string) => {
     startDemoSession();
     setUser(getDemoUser());
-    window.location.href = redirectTo ?? "/ringkasan";
+    window.location.href = redirectTo ?? "/";
   }, []);
 
   const signInWithGoogle = useCallback(async (redirectTo?: string) => {

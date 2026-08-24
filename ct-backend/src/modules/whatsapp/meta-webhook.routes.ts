@@ -22,8 +22,7 @@ export interface MetaWebhookRoutesOptions extends MetaWebhookHandlers {
  *
  * The route prefix in `app.register` MUST be something that does NOT go
  * through the authOnly / subscription middleware in this codebase — Meta
- * only sends unsigned requests with query params (verify) plus a JSON
- * body (deliveries).
+ * POSTs `X-Hub-Signature-256` plus JSON body (deliveries).
  *
  * Usage:
  *
@@ -61,7 +60,7 @@ export async function metaWebhookRoutes(
   app.addContentTypeParser(
     "application/json",
     { parseAs: "string", bodyLimit: 1 * 1024 * 1024 },
-    (_req, body: string | Uint8Array, done) => {
+    (req, body: string | Uint8Array, done) => {
       let text: string;
       if (typeof body === "string") {
         text = body;
@@ -70,6 +69,7 @@ export async function metaWebhookRoutes(
       } else {
         text = String(body);
       }
+      req.rawBody = text;
       try {
         done(null, text ? JSON.parse(text) : {});
       } catch (err) {
@@ -105,6 +105,9 @@ export async function metaWebhookRoutes(
 }
 
 declare module "fastify" {
+  interface FastifyRequest {
+    rawBody?: string;
+  }
   interface FastifyInstance {
     metaWhatsApp?: ReturnType<MetaWhatsAppController["metaService"]>;
   }

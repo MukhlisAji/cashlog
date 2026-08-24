@@ -41,85 +41,6 @@ export async function buildApp(env: Env) {
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   });
 
-  // #region debug-point A:budgets-cors-report-helper
-  const reportBudgetsCorsDebug = async (
-    hypothesisId: string,
-    location: string,
-    msg: string,
-    data: Record<string, unknown>,
-  ) => {
-    let debugServerUrl = "http://127.0.0.1:7777/event";
-    let debugSessionId = "budgets-cors-error";
-    try {
-      const { readFileSync } = await import("node:fs");
-      const envText = readFileSync(".dbg/budgets-cors-error.env", "utf8");
-      debugServerUrl =
-        envText.match(/DEBUG_SERVER_URL=(.+)/)?.[1]?.trim() ?? debugServerUrl;
-      debugSessionId =
-        envText.match(/DEBUG_SESSION_ID=(.+)/)?.[1]?.trim() ?? debugSessionId;
-    } catch {
-      // ignore debug reporting setup errors
-    }
-
-    void fetch(debugServerUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: debugSessionId,
-        runId: "pre-fix",
-        hypothesisId,
-        location,
-        msg: `[DEBUG] ${msg}`,
-        data,
-        ts: Date.now(),
-      }),
-    }).catch(() => {});
-  };
-  // #endregion
-
-  app.addHook("onRequest", async (request) => {
-    if (!request.url.startsWith("/api/budgets")) return;
-    // #region debug-point A:budgets-request
-    await reportBudgetsCorsDebug(
-      "A",
-      "src/app.ts:onRequest",
-      "budgets request received",
-      {
-        method: request.method,
-        url: request.url,
-        origin: request.headers.origin ?? null,
-        accessControlRequestMethod:
-          request.headers["access-control-request-method"] ?? null,
-        accessControlRequestHeaders:
-          request.headers["access-control-request-headers"] ?? null,
-        hasAuthorization: !!request.headers.authorization,
-      },
-    );
-    // #endregion
-  });
-
-  app.addHook("onResponse", async (request, reply) => {
-    if (!request.url.startsWith("/api/budgets")) return;
-    // #region debug-point B:budgets-response
-    await reportBudgetsCorsDebug(
-      "B",
-      "src/app.ts:onResponse",
-      "budgets response sent",
-      {
-        method: request.method,
-        url: request.url,
-        statusCode: reply.statusCode,
-        origin: request.headers.origin ?? null,
-        allowOrigin: reply.getHeader("access-control-allow-origin") ?? null,
-        allowCredentials:
-          reply.getHeader("access-control-allow-credentials") ?? null,
-        allowMethods: reply.getHeader("access-control-allow-methods") ?? null,
-        allowHeaders: reply.getHeader("access-control-allow-headers") ?? null,
-      },
-    );
-    // #endregion
-  });
-
   await app.register(healthRoutes, { prefix: "/api" });
   // Meta WhatsApp Cloud API webhook. Intentionally OUTSIDE the /api prefix
   // so it never collides with the authed /api/* routes and can be
@@ -132,6 +53,17 @@ export async function buildApp(env: Env) {
       }),
     {
       prefix: "/meta",
+    },
+  );
+  // Same handler under /api for reverse proxies that only forward /api/*.
+  await app.register(
+    async (instance) =>
+      metaWebhookRoutes(instance, {
+        env,
+        onMessage: (msg) => handleMetaIncomingMessage(env, msg),
+      }),
+    {
+      prefix: "/api/meta",
     },
   );
   await app.register(async (instance) => authRoutes(instance, env), {

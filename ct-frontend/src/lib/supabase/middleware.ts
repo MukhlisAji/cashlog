@@ -102,10 +102,28 @@ export async function updateSession(request: NextRequest) {
 
   if (user && (isProtected || isSubscriptionExpiredPage || pathname === "/")) {
     const sub = await checkSubscriptionFromProfile(supabase, user.id);
+    const neverSubscribed = !sub.allowed && !sub.expiresAt;
 
-    if (!sub.allowed && !isSubscriptionExpiredPage) {
+    if (!sub.allowed && isProtected) {
+      const url = request.nextUrl.clone();
+      url.pathname = neverSubscribed ? "/" : "/subscription-expired";
+      if (neverSubscribed) {
+        url.search = request.nextUrl.search;
+      } else {
+        url.search = "";
+      }
+      return NextResponse.redirect(url);
+    }
+
+    if (!sub.allowed && pathname === "/" && !neverSubscribed) {
       const url = request.nextUrl.clone();
       url.pathname = "/subscription-expired";
+      return NextResponse.redirect(url);
+    }
+
+    if (!sub.allowed && isSubscriptionExpiredPage && neverSubscribed) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
       return NextResponse.redirect(url);
     }
 
@@ -123,8 +141,9 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (isAuth && user) {
+    const sub = await checkSubscriptionFromProfile(supabase, user.id);
     const url = request.nextUrl.clone();
-    url.pathname = "/ringkasan";
+    url.pathname = sub.allowed ? "/ringkasan" : "/";
     return NextResponse.redirect(url);
   }
 

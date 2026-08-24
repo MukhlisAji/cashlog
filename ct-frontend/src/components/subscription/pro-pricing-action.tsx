@@ -5,6 +5,7 @@ import {
   SubscribeButtonOrRegister,
 } from "@/components/subscription/subscribe-button";
 import { useAuth } from "@/hooks/use-auth";
+import { useSubscription } from "@/hooks/use-subscription";
 import { ButtonLink } from "@/components/ui/button-link";
 import { ROUTES } from "@/lib/constants";
 import { TRIAL_DAYS } from "@/lib/pricing";
@@ -17,11 +18,20 @@ interface PricingActionProps {
 
 export function PricingAction({ tier, label }: PricingActionProps) {
   const { isAuthenticated, isLoading } = useAuth();
+  const { isAllowed, isLoading: subLoading } = useSubscription();
 
-  if (isLoading) {
+  if (isLoading || subLoading) {
     return (
       <ButtonLink className="mt-8 w-full" href={ROUTES.register} variant="outline">
         Memuat...
+      </ButtonLink>
+    );
+  }
+
+  if (isAuthenticated && !isAllowed) {
+    return (
+      <ButtonLink className="mt-8 w-full" href={ROUTES.trial}>
+        {label ?? `Mulai trial ${TRIAL_DAYS} hari`}
       </ButtonLink>
     );
   }
