@@ -8,7 +8,7 @@ export function buildWelcomeEmailHtml(options: {
   dashboardUrl: string;
   onboardingUrl: string;
 }): string {
-  const { name, trialDays, dashboardUrl, onboardingUrl } = options;
+  const { name, dashboardUrl, onboardingUrl } = options;
 
   return `
 <!DOCTYPE html>
@@ -40,7 +40,7 @@ export function buildWelcomeEmailText(options: {
   dashboardUrl: string;
   onboardingUrl: string;
 }): string {
-  const { name, trialDays, dashboardUrl, onboardingUrl } = options;
+  const { name, dashboardUrl, onboardingUrl } = options;
   return [
     `Selamat datang di ${BRAND}!`,
     "",
