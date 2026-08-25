@@ -32,6 +32,6 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
-
+bin/
 # Vercel
 .vercel

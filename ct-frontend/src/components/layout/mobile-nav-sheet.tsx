@@ -6,9 +6,9 @@ import {
   BarChart3,
   LayoutDashboard,
   LogOut,
-  MessageCircle,
   Settings,
 } from "lucide-react";
+import Image from "next/image";
 
 import { MarketingNavLinks } from "@/components/landing/marketing-nav-links";
 import { MarketingMulaiButton } from "@/components/landing/marketing-mulai-button";
@@ -183,14 +183,21 @@ export function MobileNavSheet({
         className="flex h-full max-h-[100dvh] w-[min(100vw-1rem,20rem)] flex-col gap-0 overflow-hidden border-l p-0 sm:max-w-xs"
       >
         {/* Header */}
-        <div className="flex items-center gap-3 border-b px-5 py-4 pr-14">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-            <MessageCircle className="size-4" />
-          </span>
-          <div>
-            <p className="font-semibold leading-tight">{siteConfig.name}</p>
-            <p className="text-xs text-muted-foreground">Menu navigasi</p>
-          </div>
+        <div className="flex items-center border-b px-5 py-4 pr-14">
+          <Image
+            src="/brand/wordmark-light.jpeg"
+            alt={siteConfig.name}
+            width={420}
+            height={96}
+            className="h-7 w-auto max-w-[9.5rem] object-contain object-left dark:hidden"
+          />
+          <Image
+            src="/brand/wordmark-dark.jpeg"
+            alt=""
+            width={420}
+            height={96}
+            className="hidden h-7 w-auto max-w-[9.5rem] object-contain object-left dark:block"
+          />
         </div>
 
         {/* Nav body */}

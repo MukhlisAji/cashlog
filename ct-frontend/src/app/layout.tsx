@@ -29,6 +29,14 @@ export const metadata: Metadata = {
   },
   description: siteConfig.description,
   metadataBase: new URL(getSiteUrl()),
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon-96x96.png", sizes: "96x96", type: "image/png" },
+    ],
+    apple: "/apple-icon.png",
+  },
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
