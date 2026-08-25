@@ -1,7 +1,6 @@
 import type { sheets_v4 } from "googleapis";
 
 import {
-  SHEET_TITLE,
   TRANSACTION_HEADERS,
 } from "./sheets.constants.js";
 
@@ -47,26 +46,52 @@ function buildSummaryValues(year: string): sheets_v4.Schema$ValueRange[] {
   ];
 }
 
-export function buildCreateSpreadsheetRequest(year: string): sheets_v4.Schema$Spreadsheet {
-  return {
-    properties: { title: SHEET_TITLE },
-    sheets: [
-      {
+/** Shape a Drive-created blank spreadsheet into Summary + year tabs. */
+export async function ensureAppSpreadsheetTabs(
+  sheets: sheets_v4.Sheets,
+  spreadsheetId: string,
+  year = getCurrentYear(),
+): Promise<void> {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const existing = meta.data.sheets ?? [];
+  const hasSummary = existing.some((s) => s.properties?.title === "Summary");
+  const hasYear = existing.some((s) => s.properties?.title === year);
+  const firstSheetId = existing[0]?.properties?.sheetId;
+
+  const requests: sheets_v4.Schema$Request[] = [];
+
+  if (!hasSummary && firstSheetId != null) {
+    requests.push({
+      updateSheetProperties: {
         properties: {
+          sheetId: firstSheetId,
           title: "Summary",
           index: 0,
           gridProperties: { frozenRowCount: 1 },
         },
+        fields: "title,index,gridProperties.frozenRowCount",
       },
-      {
+    });
+  }
+
+  if (!hasYear) {
+    requests.push({
+      addSheet: {
         properties: {
           title: year,
           index: 1,
           gridProperties: { frozenRowCount: 1 },
         },
       },
-    ],
-  };
+    });
+  }
+
+  if (requests.length === 0) return;
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: { requests },
+  });
 }
 
 export async function populateSheetTemplate(

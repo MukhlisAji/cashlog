@@ -5,7 +5,7 @@ import {
   googleConnectionRepository,
 } from "../config/config.repository.js";
 
-const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
+const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
 
 export function createOAuth2Client(env: Env) {
   return new google.auth.OAuth2(

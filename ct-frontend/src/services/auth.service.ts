@@ -61,7 +61,7 @@ export const authService = {
     if (error) throw error;
   },
 
-  /** Incremental Sheets grant — Google shows "additional access" (Continue), not the checklist. */
+  /** Incremental Drive+Sheets grant — only files created/opened with this app. */
   async signInWithGoogleSheets(redirectTo = "/ringkasan", loginHint?: string) {
     if (!canUseSupabaseAuth()) {
       throw new Error("Supabase belum dikonfigurasi");

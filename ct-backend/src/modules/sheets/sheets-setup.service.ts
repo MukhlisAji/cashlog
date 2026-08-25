@@ -5,10 +5,11 @@ import {
   userConfigRepository,
 } from "../config/config.repository.js";
 import {
-  buildCreateSpreadsheetRequest,
+  ensureAppSpreadsheetTabs,
   populateSheetTemplate,
 } from "./sheet-template.service.js";
-import { getSheetsClient } from "./google-client.js";
+import { getDriveClient, getSheetsClient } from "./google-client.js";
+import { SHEET_TITLE } from "./sheets.constants.js";
 
 export async function setupGoogleSheet(env: Env, userId: string) {
   const connection = await googleConnectionRepository.getByUserId(userId);
@@ -24,16 +25,28 @@ export async function setupGoogleSheet(env: Env, userId: string) {
     };
   }
 
+  const drive = await getDriveClient(env, userId);
   const sheets = await getSheetsClient(env, userId);
   const year = String(new Date().getFullYear());
 
-  const created = await sheets.spreadsheets.create({
-    requestBody: buildCreateSpreadsheetRequest(year),
+  const created = await drive.files.create({
+    requestBody: {
+      name: SHEET_TITLE,
+      mimeType: "application/vnd.google-apps.spreadsheet",
+    },
+    fields: "id, webViewLink",
   });
 
-  const spreadsheetId = created.data.spreadsheetId!;
-  const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
+  const spreadsheetId = created.data.id;
+  if (!spreadsheetId) {
+    throw new Error("Google Drive did not return a spreadsheet id");
+  }
 
+  const spreadsheetUrl =
+    created.data.webViewLink ??
+    `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
+
+  await ensureAppSpreadsheetTabs(sheets, spreadsheetId, year);
   await populateSheetTemplate(sheets, spreadsheetId, year);
 
   await googleConnectionRepository.updateSpreadsheet(
