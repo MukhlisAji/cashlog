@@ -39,6 +39,10 @@ export function LeadWhatsAppPhoneForm({
   const [showChangeForm, setShowChangeForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const phoneRegistered = isConnected && !!status?.phone;
+  const sheetPending = phoneRegistered && !sheetConnected;
+  const fullyOnboarded = phoneRegistered && sheetConnected;
+
   useEffect(() => {
     if (!loading) {
       setProgressStep(0);
@@ -50,33 +54,39 @@ export function LeadWhatsAppPhoneForm({
     return () => window.clearInterval(timer);
   }, [loading]);
 
+  function fail(message: string) {
+    setError(message);
+    showToast("error", message);
+    setLoading(false);
+  }
+
+  async function finishOnboarded() {
+    setShowChangeForm(false);
+    setPhone("");
+    await refresh();
+    await refreshSheet();
+    setLoading(false);
+    showToast(
+      NOTICE_MESSAGES.whatsapp_connected.kind,
+      NOTICE_MESSAGES.whatsapp_connected.text,
+    );
+    onOnboarded?.();
+  }
+
   async function startGoogleOAuth() {
     if (sheetHasToken) {
       const provision = await sheetsService.provisionSheet();
       if (!provision.success) {
-        setError(provision.error ?? "Gagal membuat Google Sheet.");
-        showToast(
-          NOTICE_MESSAGES.save_failed.kind,
-          NOTICE_MESSAGES.save_failed.text,
-        );
-        setLoading(false);
+        fail(provision.error ?? "Gagal membuat Google Sheet.");
         return;
       }
-      await refreshSheet();
-      setLoading(false);
-      showToast(NOTICE_MESSAGES.saved.kind, NOTICE_MESSAGES.saved.text);
-      onOnboarded?.();
+      await finishOnboarded();
       return;
     }
 
     const oauth = await sheetsService.getOAuthUrl("/settings");
     if (!oauth.success || !oauth.data?.url) {
-      setError(oauth.error ?? "Gagal menghubungkan akun Google.");
-      showToast(
-        NOTICE_MESSAGES.save_failed.kind,
-        NOTICE_MESSAGES.save_failed.text,
-      );
-      setLoading(false);
+      fail(oauth.error ?? "Gagal menghubungkan akun Google.");
       return;
     }
     setProgressStep(2);
@@ -84,11 +94,11 @@ export function LeadWhatsAppPhoneForm({
   }
 
   async function handleSave() {
-    if (!isConnected && !phone.trim()) return;
+    if (!isConnected && !phone.trim() && !sheetPending) return;
     setLoading(true);
     setError(null);
 
-    if (isConnected && !showChangeForm && !sheetConnected) {
+    if (sheetPending && !showChangeForm) {
       await startGoogleOAuth();
       return;
     }
@@ -96,17 +106,16 @@ export function LeadWhatsAppPhoneForm({
     if (phone.trim()) {
       const result = await whatsappService.registerPhone(phone.trim());
       if (!result.success) {
-        setLoading(false);
-        setError(result.error ?? "Gagal mendaftarkan nomor.");
-        showToast(
-          NOTICE_MESSAGES.save_failed.kind,
-          NOTICE_MESSAGES.save_failed.text,
-        );
+        fail(result.error ?? "Gagal mendaftarkan nomor.");
         return;
       }
       if (result.data?.requiresGoogleAuth && result.data.oauthUrl) {
         setProgressStep(2);
         window.location.assign(result.data.oauthUrl);
+        return;
+      }
+      if (result.data?.spreadsheetUrl) {
+        await finishOnboarded();
         return;
       }
     }
@@ -116,23 +125,24 @@ export function LeadWhatsAppPhoneForm({
       return;
     }
 
-    setLoading(false);
-    await refresh();
-    await refreshSheet();
-    showToast(NOTICE_MESSAGES.saved.kind, NOTICE_MESSAGES.saved.text);
-    onOnboarded?.();
+    await finishOnboarded();
   }
 
-  const needsActivation = !isConnected || !sheetConnected;
-  const showPhoneInput = !isConnected || showChangeForm;
+  const showPhoneInput = !phoneRegistered || showChangeForm;
+  const showPrimaryButton = !fullyOnboarded || showChangeForm;
+  const primaryLabel = showChangeForm
+    ? "Simpan nomor baru"
+    : sheetPending
+      ? "Buat Google Sheet"
+      : "Simpan & Aktifkan";
 
   return (
     <div className="flex flex-col gap-3">
-      {isConnected && status?.phone ? (
+      {phoneRegistered ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3">
           <p className="text-sm">
             Nomor kamu terdaftar:{" "}
-            <span className="font-semibold">+{status.phone}</span>
+            <span className="font-semibold">+{status?.phone}</span>
           </p>
           <Button
             variant="outline"
@@ -151,10 +161,15 @@ export function LeadWhatsAppPhoneForm({
           tanpa minta izin Google lagi.
         </p>
       )}
+      {sheetPending && !showChangeForm ? (
+        <p className="text-sm text-muted-foreground">
+          Nomor sudah tersimpan. Lanjutkan untuk membuat Google Sheet.
+        </p>
+      ) : null}
       {showPhoneInput && (
         <div className="flex flex-1 flex-col gap-1">
           <Label htmlFor="lead-wa-phone">
-            {isConnected ? "Nomor WhatsApp baru" : "Nomor WhatsApp"}
+            {phoneRegistered ? "Nomor WhatsApp baru" : "Nomor WhatsApp"}
           </Label>
           <Input
             id="lead-wa-phone"
@@ -165,12 +180,12 @@ export function LeadWhatsAppPhoneForm({
           />
         </div>
       )}
-      {needsActivation || showChangeForm ? (
+      {showPrimaryButton ? (
         <SettingsSaveButton
           loading={loading}
-          disabled={showPhoneInput && !phone.trim()}
+          disabled={showPhoneInput && !phone.trim() && !sheetPending}
           onClick={() => void handleSave()}
-          label="Simpan & Aktifkan"
+          label={primaryLabel}
           loadingLabel={PROGRESS_STEPS[progressStep]}
         />
       ) : null}

@@ -27,8 +27,6 @@ import { useSheetStatus } from "@/hooks/use-sheet-status";
 import { useSubscription } from "@/hooks/use-subscription";
 import { useWhatsAppStatus } from "@/hooks/use-whatsapp-status";
 import { LeadWhatsAppPhoneForm } from "@/components/settings/lead-whatsapp-phone-form";
-import { showToast } from "@/components/ui/toaster";
-import { NOTICE_MESSAGES } from "@/lib/notice";
 import { formatLongDate } from "@/lib/format";
 import { formatTierPrice, getTierLabel } from "@/lib/pricing";
 import { subscriptionService } from "@/services/subscription.service";
@@ -218,12 +216,17 @@ export default function SettingsPage() {
                 <div>
                   <CardTitle className="text-lg font-bold">Aktifkan Pencatatan WhatsApp</CardTitle>
                   <CardDescription>
-                    Isi nomor WhatsApp, lalu tekan Simpan & Aktifkan.
-                    Google Sheet dibuat saat aktivasi nomor (izin Google diminta di situ).
+                    {sheetConnected
+                      ? "Pencatatan aktif. Ubah nomor kapan saja, atau buka Google Sheet."
+                      : "Isi nomor WhatsApp untuk membuat Google Sheet dan mengaktifkan pencatatan."}
                   </CardDescription>
                 </div>
                 <Badge variant={sheetConnected ? "default" : "secondary"}>
-                  {sheetConnected ? "Sheet siap" : "Belum aktif"}
+                  {sheetConnected
+                    ? "Sheet siap"
+                    : waConnected
+                      ? "Sheet pending"
+                      : "Belum aktif"}
                 </Badge>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
@@ -244,13 +247,9 @@ export default function SettingsPage() {
                   refreshSheet={refreshSheet}
                   onOnboarded={() => {
                     setInviteFamily(true);
-                    showToast(
-                      NOTICE_MESSAGES.whatsapp_connected.kind,
-                      NOTICE_MESSAGES.whatsapp_connected.text,
-                    );
                   }}
                 />
-                {sheetStatus?.spreadsheetUrl && (
+                {sheetConnected && sheetStatus?.spreadsheetUrl && (
                   <Button
                     variant="outline"
                     size="sm"

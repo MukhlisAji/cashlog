@@ -63,8 +63,8 @@ function ToastViewport() {
           className={cn(
             "pointer-events-auto flex items-start gap-2 rounded-lg border px-3 py-3 text-sm shadow-lg",
             toast.kind === "success"
-              ? "border-emerald-500/30 bg-emerald-50 text-emerald-950 dark:bg-emerald-950/80 dark:text-emerald-50"
-              : "border-destructive/30 bg-destructive/10 text-destructive",
+              ? "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-50"
+              : "border-red-200 bg-red-50 text-red-950 dark:border-red-800 dark:bg-red-950 dark:text-red-50",
           )}
           role="status"
         >
