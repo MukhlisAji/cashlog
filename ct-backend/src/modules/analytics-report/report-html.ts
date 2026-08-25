@@ -1,5 +1,6 @@
-import type { AnalyticsData } from "../sheets/sheet-data.service.js";
 import { BRAND_NAME } from "../../config/brand.js";
+import { reportWordmarkDataUri } from "../../lib/brand-assets.js";
+import type { AnalyticsData } from "../sheets/sheet-data.service.js";
 import { formatMonthLabel, formatRupiah } from "../whatsapp/wa-sheet-queries.js";
 import type { ComputedInsights } from "./analytics-insights.js";
 import { getCategoryColor } from "./analytics-colors.js";
@@ -252,6 +253,11 @@ export function buildAnalyticsReportHtml(input: ReportHtmlInput): string {
     )
     .join("");
 
+  const wordmark = reportWordmarkDataUri();
+  const brandMark = wordmark
+    ? `<img class="logo" src="${wordmark}" alt="${esc(BRAND_NAME)}" />`
+    : `<div class="logo-fallback">${esc(BRAND_NAME)}</div>`;
+
   return `<!DOCTYPE html>
 <html lang="id">
 <head>
@@ -266,12 +272,14 @@ export function buildAnalyticsReportHtml(input: ReportHtmlInput): string {
       line-height: 1.45;
     }
     .page { padding: 28px 32px; max-width: 820px; margin: 0 auto; }
-    .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
     .logo {
-      width: 36px; height: 36px; border-radius: 10px;
-      background: linear-gradient(135deg, #22c55e, #16a34a);
-      color: #fff; font-weight: 800; font-size: 18px;
-      display: flex; align-items: center; justify-content: center;
+      height: 40px; width: auto; max-width: 200px;
+      object-fit: contain; object-position: left center;
+      display: block; flex-shrink: 0;
+    }
+    .logo-fallback {
+      font-weight: 800; font-size: 18px; color: #16a34a; letter-spacing: -0.02em;
     }
     h1 { font-size: 22px; font-weight: 700; }
     .subtitle { color: #6b7280; margin-top: 4px; font-size: 13px; }
@@ -359,7 +367,7 @@ export function buildAnalyticsReportHtml(input: ReportHtmlInput): string {
 <body>
   <div class="page">
     <div class="brand">
-      <div class="logo">C</div>
+      ${brandMark}
       <div>
         <h1>${esc(reportTitle)} <span class="pro-badge">Pro</span></h1>
         <div class="subtitle">${esc(subtitle)}</div>

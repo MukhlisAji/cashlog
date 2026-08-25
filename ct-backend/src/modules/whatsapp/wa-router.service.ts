@@ -506,7 +506,9 @@ async function persistProcessedTransactions(
     amount: item.amount,
     category: item.category,
     source: "whatsapp",
-    note: item.type === "income" ? "income" : "",
+    note: [item.type === "income" ? "income" : "", item.note]
+      .filter(Boolean)
+      .join(" · "),
     recorder: ctx.displayName,
   }));
 

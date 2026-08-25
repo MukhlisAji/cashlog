@@ -9,6 +9,7 @@ export interface ParsedLayer3Transaction {
   category: string;
   description: string;
   transaction_date: string;
+  note: string;
 }
 
 export interface ProcessTransactionsToolArgs {
@@ -52,7 +53,16 @@ export const PROCESS_TRANSACTIONS_TOOL = {
               },
               amount: { type: "number" },
               category: { type: "string" },
-              description: { type: "string" },
+              description: {
+                type: "string",
+                description:
+                  "Nama barang/jasa singkat (max 80). Jangan taruh alasan/konteks di sini.",
+              },
+              note: {
+                type: "string",
+                description:
+                  "Konteks opsional yang bukan nama item: alasan, siapa, tempat. Contoh: 'naqi menangis'. Kosongkan jika tidak ada. Jangan duplikat description.",
+              },
               transaction_date: {
                 type: "string",
                 description: "YYYY-MM-DD",
@@ -143,6 +153,10 @@ function parseOneTransaction(
   const transaction_date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw)
     ? dateRaw
     : fallbackDate;
+  const note =
+    typeof data.note === "string" && data.note.trim()
+      ? data.note.trim().slice(0, 200)
+      : "";
 
   return {
     type,
@@ -150,6 +164,7 @@ function parseOneTransaction(
     category,
     description: description.charAt(0).toUpperCase() + description.slice(1),
     transaction_date,
+    note,
   };
 }
 
@@ -216,6 +231,7 @@ Untuk pemasukan gunakan type=income dan category=Pemasukan (atau kategori yang d
 Jika pesan berisi belanjaan/transaksi, WAJIB panggil process_transactions.
 amount angka Rupiah (20rb=20000, 35k=35000, 1.5jt=1500000).
 transaction_date YYYY-MM-DD; default hari ini.
+note: konteks/alasan yang BUKAN nama barang. Contoh: "beli balon tiup, naqi menangis. 15k" → description="Balon tiup" note="Naqi menangis". "Makan siang 50rb" → note="". Jangan isi note dengan daftar belanja.
 
 Aturan bundling (WAJIB):
 Jika user menyebut beberapa barang tapi HANYA ada SATU total harga, JANGAN pecah jadi beberapa transaksi.
@@ -323,6 +339,7 @@ export async function callProcessTransactionsFromVision(
     `Kategori yang valid: ${names || "Lainnya, Makanan, Belanja"}.`,
     "Pecah baris struk hanya jika masing-masing punya harga sendiri. Kalau struk punya satu total, catat satu transaksi dengan description ringkasan item.",
     "amount dalam Rupiah (angka). type=expense kecuali jelas pemasukan.",
+    "note: nama toko atau caption user yang bukan nama item; kosongkan jika tidak ada.",
     caption?.trim() ? `Caption user: ${caption.trim()}` : "",
   ]
     .filter(Boolean)
