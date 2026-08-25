@@ -17,7 +17,6 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const origin = getSiteUrl().replace(/\/$/, "");
   const redirect = safeRedirectPath(searchParams.get("redirect"));
-  const phase = searchParams.get("phase");
 
   if (!isSupabaseConfigured()) {
     return NextResponse.redirect(`${origin}/login`);
@@ -30,7 +29,7 @@ export async function GET(request: Request) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error && data.session) {
-      if (phase === "sheets" && data.session.provider_refresh_token) {
+      if (data.session.provider_refresh_token) {
         await connectGoogleTokenFromSession(
           data.session.access_token,
           data.session.provider_refresh_token,

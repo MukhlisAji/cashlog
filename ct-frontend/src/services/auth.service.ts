@@ -55,6 +55,11 @@ export const authService = {
       provider: "google",
       options: {
         redirectTo: `${origin}/auth/callback?redirect=${encodeURIComponent(redirectTo)}`,
+        scopes: GOOGLE_SHEETS_SCOPES,
+        queryParams: {
+          access_type: "offline",
+          include_granted_scopes: "true",
+        },
       },
     });
 
