@@ -33,7 +33,7 @@ function BrandMark({ markOnly }: { markOnly: boolean }) {
   return (
     <>
       <Image
-        src="/brand/wordmark-light.jpeg"
+        src="/brand/wordmark-light.png"
         alt={siteConfig.name}
         width={420}
         height={96}
@@ -41,7 +41,7 @@ function BrandMark({ markOnly }: { markOnly: boolean }) {
         priority
       />
       <Image
-        src="/brand/wordmark-dark.jpeg"
+        src="/brand/wordmark-dark.png"
         alt=""
         width={420}
         height={96}

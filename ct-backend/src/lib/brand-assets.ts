@@ -12,12 +12,12 @@ let cachedWordmark: string | null | undefined;
 export function reportWordmarkDataUri(): string | null {
   if (cachedWordmark !== undefined) return cachedWordmark;
 
-  const filePath = join(packageRoot(), "assets/brand/wordmark-light.jpeg");
+  const filePath = join(packageRoot(), "assets/brand/wordmark-light.png");
   if (!existsSync(filePath)) {
     cachedWordmark = null;
     return cachedWordmark;
   }
 
-  cachedWordmark = `data:image/jpeg;base64,${readFileSync(filePath).toString("base64")}`;
+  cachedWordmark = `data:image/png;base64,${readFileSync(filePath).toString("base64")}`;
   return cachedWordmark;
 }

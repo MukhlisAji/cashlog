@@ -185,14 +185,14 @@ export function MobileNavSheet({
         {/* Header */}
         <div className="flex items-center border-b px-5 py-4 pr-14">
           <Image
-            src="/brand/wordmark-light.jpeg"
+            src="/brand/wordmark-light.png"
             alt={siteConfig.name}
             width={420}
             height={96}
             className="h-7 w-auto max-w-[9.5rem] object-contain object-left dark:hidden"
           />
           <Image
-            src="/brand/wordmark-dark.jpeg"
+            src="/brand/wordmark-dark.png"
             alt=""
             width={420}
             height={96}
