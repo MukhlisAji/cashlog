@@ -12,6 +12,7 @@ interface ApiResponse<T> {
   success: boolean;
   data?: T;
   error?: string;
+  code?: string;
 }
 
 async function apiFetch<T>(
@@ -41,7 +42,20 @@ async function apiFetch<T>(
     headers,
   });
 
-  return response.json() as Promise<ApiResponse<T>>;
+  const body = (await response.json()) as ApiResponse<T> & {
+    message?: string;
+  };
+
+  if (!response.ok && body.success !== true) {
+    return {
+      success: false,
+      error: body.error ?? body.message ?? "Request failed",
+      code: body.code,
+      data: body.data,
+    };
+  }
+
+  return body;
 }
 
 export interface SheetStatus {

@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { showToast } from "@/components/ui/toaster";
 import { useWhatsAppStatus } from "@/hooks/use-whatsapp-status";
 import { NOTICE_MESSAGES } from "@/lib/notice";
+import { connectSheetsUrl, isGoogleScopeMissing } from "@/lib/google-consent";
+import { sanitizePhoneInput } from "@/lib/phone";
 import { sheetsService } from "@/services/sheets.service";
 import { whatsappService } from "@/services/whatsapp.service";
 
@@ -73,9 +75,23 @@ export function LeadWhatsAppPhoneForm({
     onOnboarded?.();
   }
 
+  function goToConsent() {
+    window.location.assign(connectSheetsUrl("/settings"));
+  }
+
   async function startGoogleOAuth() {
     if (sheetHasToken) {
       const provision = await sheetsService.provisionSheet();
+      if (
+        !provision.success &&
+        isGoogleScopeMissing({
+          code: provision.code,
+          error: provision.error,
+        })
+      ) {
+        goToConsent();
+        return;
+      }
       if (!provision.success) {
         fail(provision.error ?? "Gagal membuat Google Sheet.");
         return;
@@ -84,13 +100,7 @@ export function LeadWhatsAppPhoneForm({
       return;
     }
 
-    const oauth = await sheetsService.getOAuthUrl("/settings");
-    if (!oauth.success || !oauth.data?.url) {
-      fail(oauth.error ?? "Gagal menghubungkan akun Google.");
-      return;
-    }
-    setProgressStep(2);
-    window.location.assign(oauth.data.url);
+    goToConsent();
   }
 
   async function handleSave() {
@@ -105,13 +115,18 @@ export function LeadWhatsAppPhoneForm({
 
     if (phone.trim()) {
       const result = await whatsappService.registerPhone(phone.trim());
-      if (!result.success) {
-        fail(result.error ?? "Gagal mendaftarkan nomor.");
+      if (
+        result.data?.requiresGoogleAuth ||
+        isGoogleScopeMissing({
+          code: result.code,
+          error: result.error,
+        })
+      ) {
+        goToConsent();
         return;
       }
-      if (result.data?.requiresGoogleAuth && result.data.oauthUrl) {
-        setProgressStep(2);
-        window.location.assign(result.data.oauthUrl);
+      if (!result.success) {
+        fail(result.error ?? "Gagal mendaftarkan nomor.");
         return;
       }
       if (result.data?.spreadsheetUrl) {
@@ -174,8 +189,10 @@ export function LeadWhatsAppPhoneForm({
           <Input
             id="lead-wa-phone"
             placeholder="08xxxxxxxxxx"
+            inputMode="numeric"
+            maxLength={13}
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={(e) => setPhone(sanitizePhoneInput(e.target.value))}
             disabled={loading}
           />
         </div>

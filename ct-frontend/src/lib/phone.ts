@@ -56,7 +56,7 @@ export function validateIndonesianWaPhone(input: string): PhoneValidationResult 
   return { ok: true, normalized, local: normalized.slice(2) };
 }
 
-/** Strip to digits for input field (max 12). */
+/** Strip to digits for input field (max 13). */
 export function sanitizePhoneInput(value: string): string {
-  return value.replace(/\D/g, "").slice(0, 12);
+  return value.replace(/\D/g, "").slice(0, 13);
 }

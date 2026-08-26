@@ -24,6 +24,7 @@ import {
   MAX_HOUSEHOLD_MEMBER_SLOTS,
 } from "@/lib/pricing";
 import { NOTICE_MESSAGES } from "@/lib/notice";
+import { sanitizePhoneInput } from "@/lib/phone";
 import { householdService } from "@/services/household.service";
 
 function formatRupiah(amount: number): string {
@@ -286,8 +287,10 @@ export function HouseholdMembersEditor({
               />
               <Input
                 placeholder="08xxxxxxxxxx"
+                inputMode="numeric"
+                maxLength={13}
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => setPhone(sanitizePhoneInput(e.target.value))}
                 disabled={loading || !household?.canInviteMember}
               />
               <SettingsSaveButton

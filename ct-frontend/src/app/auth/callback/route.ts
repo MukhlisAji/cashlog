@@ -39,6 +39,13 @@ export async function GET(request: Request) {
 
       void triggerWelcomeEmail(data.session.access_token);
 
+      if (searchParams.get("phase") === "sheets") {
+        const next = new URL(`${origin}/auth/connect-sheets`);
+        next.searchParams.set("redirect", redirect);
+        next.searchParams.set("provision", "1");
+        return NextResponse.redirect(next);
+      }
+
       return NextResponse.redirect(`${origin}${redirect}`);
     }
   }

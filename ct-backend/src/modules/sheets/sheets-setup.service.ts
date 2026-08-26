@@ -4,11 +4,15 @@ import {
   googleConnectionRepository,
   userConfigRepository,
 } from "../config/config.repository.js";
+import { getDriveClient, getSheetsClient, hasDriveFileScope } from "./google-client.js";
+import {
+  GoogleScopeMissingError,
+  isGoogleInsufficientScopeError,
+} from "./google-scope.js";
 import {
   ensureAppSpreadsheetTabs,
   populateSheetTemplate,
 } from "./sheet-template.service.js";
-import { getDriveClient, getSheetsClient } from "./google-client.js";
 import { SHEET_TITLE } from "./sheets.constants.js";
 
 export async function setupGoogleSheet(env: Env, userId: string) {
@@ -25,40 +29,52 @@ export async function setupGoogleSheet(env: Env, userId: string) {
     };
   }
 
-  const drive = await getDriveClient(env, userId);
-  const sheets = await getSheetsClient(env, userId);
-  const year = String(new Date().getFullYear());
-
-  const created = await drive.files.create({
-    requestBody: {
-      name: SHEET_TITLE,
-      mimeType: "application/vnd.google-apps.spreadsheet",
-    },
-    fields: "id, webViewLink",
-  });
-
-  const spreadsheetId = created.data.id;
-  if (!spreadsheetId) {
-    throw new Error("Google Drive did not return a spreadsheet id");
+  const driveOk = await hasDriveFileScope(env, userId);
+  if (!driveOk) {
+    throw new GoogleScopeMissingError();
   }
 
-  const spreadsheetUrl =
-    created.data.webViewLink ??
-    `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
+  try {
+    const drive = await getDriveClient(env, userId);
+    const sheets = await getSheetsClient(env, userId);
+    const year = String(new Date().getFullYear());
 
-  await ensureAppSpreadsheetTabs(sheets, spreadsheetId, year);
-  await populateSheetTemplate(sheets, spreadsheetId, year);
+    const created = await drive.files.create({
+      requestBody: {
+        name: SHEET_TITLE,
+        mimeType: "application/vnd.google-apps.spreadsheet",
+      },
+      fields: "id, webViewLink",
+    });
 
-  await googleConnectionRepository.updateSpreadsheet(
-    userId,
-    spreadsheetId,
-    spreadsheetUrl,
-  );
+    const spreadsheetId = created.data.id;
+    if (!spreadsheetId) {
+      throw new Error("Google Drive did not return a spreadsheet id");
+    }
 
-  await userConfigRepository.ensure(userId);
-  await categoriesRepository.seedDefaults(userId);
+    const spreadsheetUrl =
+      created.data.webViewLink ??
+      `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
 
-  return { spreadsheetId, spreadsheetUrl, alreadyExists: false };
+    await ensureAppSpreadsheetTabs(sheets, spreadsheetId, year);
+    await populateSheetTemplate(sheets, spreadsheetId, year);
+
+    await googleConnectionRepository.updateSpreadsheet(
+      userId,
+      spreadsheetId,
+      spreadsheetUrl,
+    );
+
+    await userConfigRepository.ensure(userId);
+    await categoriesRepository.seedDefaults(userId);
+
+    return { spreadsheetId, spreadsheetUrl, alreadyExists: false };
+  } catch (error) {
+    if (isGoogleInsufficientScopeError(error)) {
+      throw new GoogleScopeMissingError();
+    }
+    throw error;
+  }
 }
 
 export async function getSheetStatus(userId: string) {

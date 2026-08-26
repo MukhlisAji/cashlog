@@ -83,6 +83,7 @@ export const authService = {
         scopes: GOOGLE_SHEETS_SCOPES,
         queryParams: {
           access_type: "offline",
+          prompt: "consent",
           include_granted_scopes: "true",
           ...(loginHint ? { login_hint: loginHint } : {}),
         },

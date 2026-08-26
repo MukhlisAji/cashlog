@@ -2,19 +2,20 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
 import type { Env } from "../../config/env.js";
-import {
-  getOAuthStateSecret,
-  isGoogleConfigured,
-} from "../../config/env.js";
+import { isGoogleConfigured } from "../../config/env.js";
 import type { AuthenticatedRequest } from "../../lib/auth.middleware.js";
-import { signOAuthState } from "../../lib/oauth-state.js";
 import { authOnly, authWithSubscription } from "../../lib/prehandlers.js";
 import {
   ensureLeadHousehold,
   setLeadWhatsAppPhone,
 } from "../household/household.service.js";
 import { householdRepository } from "../household/household.repository.js";
-import { getGoogleAuthUrl } from "../sheets/google-client.js";
+import {
+  GOOGLE_SCOPE_MISSING,
+  GOOGLE_SCOPE_MISSING_MESSAGE,
+  GoogleScopeMissingError,
+  isGoogleInsufficientScopeError,
+} from "../sheets/google-scope.js";
 import {
   getSheetStatus,
   setupGoogleSheet,
@@ -62,34 +63,54 @@ export async function whatsappRoutes(app: FastifyInstance, env: Env) {
         return reply.code(400).send({ success: false, error: result.error });
       }
 
+      const consentPath = "/auth/connect-sheets?redirect=/settings";
+
       if (!sheet.connected) {
-        const state = signOAuthState(
-          userId,
-          getOAuthStateSecret(env),
-          "/settings",
-        );
         return {
           success: true,
           data: {
             phone: result.data.phone,
             status: "connected",
             requiresGoogleAuth: true,
-            oauthUrl: getGoogleAuthUrl(env, state),
+            consentPath,
           },
         };
       }
 
-      const spreadsheet = await setupGoogleSheet(env, userId);
-      void sendOnboardingTemplateToLeadIfReady(env, userId);
-      return {
-        success: true,
-        data: {
-          phone: result.data.phone,
-          status: "connected",
-          requiresGoogleAuth: false,
-          spreadsheetUrl: spreadsheet.spreadsheetUrl,
-        },
-      };
+      try {
+        const spreadsheet = await setupGoogleSheet(env, userId);
+        void sendOnboardingTemplateToLeadIfReady(env, userId);
+        return {
+          success: true,
+          data: {
+            phone: result.data.phone,
+            status: "connected",
+            requiresGoogleAuth: false,
+            spreadsheetUrl: spreadsheet.spreadsheetUrl,
+          },
+        };
+      } catch (error) {
+        if (
+          error instanceof GoogleScopeMissingError ||
+          isGoogleInsufficientScopeError(error)
+        ) {
+          return reply.code(409).send({
+            success: false,
+            code: GOOGLE_SCOPE_MISSING,
+            error: GOOGLE_SCOPE_MISSING_MESSAGE,
+            data: {
+              phone: result.data.phone,
+              requiresGoogleAuth: true,
+              consentPath,
+            },
+          });
+        }
+        request.log.error(error);
+        return reply.code(500).send({
+          success: false,
+          error: "Gagal membuat Google Sheet.",
+        });
+      }
     },
   );
 

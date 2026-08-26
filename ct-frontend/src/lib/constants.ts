@@ -5,6 +5,7 @@ export const ROUTES = {
   dashboard: "/ringkasan",
   analytics: "/ringkasan",
   settings: "/settings",
+  connectSheets: "/auth/connect-sheets",
   trial: "/trial",
   subscriptionExpired: "/subscription-expired",
   paymentReturn: "/payment/return",

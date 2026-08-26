@@ -11,6 +11,12 @@ import {
 } from "./google-client.js";
 import { saveGoogleTokens } from "./sheets-connection.service.js";
 import { setupGoogleSheet, getSheetStatus } from "./sheets-setup.service.js";
+import {
+  GOOGLE_SCOPE_MISSING,
+  GOOGLE_SCOPE_MISSING_MESSAGE,
+  GoogleScopeMissingError,
+  isGoogleInsufficientScopeError,
+} from "./google-scope.js";
 import { sendOnboardingTemplateToLeadIfReady } from "../whatsapp/wa-onboarding-template.service.js";
 
 export async function sheetsRoutes(app: FastifyInstance, env: Env) {
@@ -81,6 +87,14 @@ export async function sheetsRoutes(app: FastifyInstance, env: Env) {
       return reply.redirect(successRedirect.replace("sheet=authorized", "sheet=connected"));
     } catch (error) {
       request.log.error(error);
+      if (
+        error instanceof GoogleScopeMissingError ||
+        isGoogleInsufficientScopeError(error)
+      ) {
+        return reply.redirect(
+          `${env.FRONTEND_URL}/auth/connect-sheets?redirect=${encodeURIComponent(returnBase)}&scope=missing`,
+        );
+      }
       return reply.redirect(errorRedirect("setup_failed"));
     }
   });
@@ -145,6 +159,16 @@ export async function sheetsRoutes(app: FastifyInstance, env: Env) {
         return { success: true, data: result };
       } catch (error) {
         request.log.error(error);
+        if (
+          error instanceof GoogleScopeMissingError ||
+          isGoogleInsufficientScopeError(error)
+        ) {
+          return reply.code(409).send({
+            success: false,
+            code: GOOGLE_SCOPE_MISSING,
+            error: GOOGLE_SCOPE_MISSING_MESSAGE,
+          });
+        }
         return reply.code(400).send({
           success: false,
           error:

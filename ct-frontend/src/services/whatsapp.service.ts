@@ -12,6 +12,7 @@ interface ApiResponse<T> {
   success: boolean;
   data?: T;
   error?: string;
+  code?: string;
 }
 
 async function apiFetch<T>(
@@ -32,7 +33,20 @@ async function apiFetch<T>(
     },
   });
 
-  return response.json() as Promise<ApiResponse<T>>;
+  const body = (await response.json()) as ApiResponse<T> & {
+    message?: string;
+  };
+
+  if (!response.ok && body.success !== true) {
+    return {
+      success: false,
+      error: body.error ?? body.message ?? "Request failed",
+      code: body.code,
+      data: body.data,
+    };
+  }
+
+  return body;
 }
 
 export type WhatsAppStatus = "idle" | "connected" | "error";
@@ -63,6 +77,7 @@ export const whatsappService = {
       status: WhatsAppStatus;
       requiresGoogleAuth: boolean;
       oauthUrl?: string;
+      consentPath?: string;
       spreadsheetUrl?: string;
     }>(
       "/api/whatsapp/phone",

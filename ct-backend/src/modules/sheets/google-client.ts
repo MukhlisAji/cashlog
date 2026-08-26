@@ -4,6 +4,7 @@ import type { Env } from "../../config/env.js";
 import {
   googleConnectionRepository,
 } from "../config/config.repository.js";
+import { accessTokenHasDriveFileScope } from "./google-scope.js";
 
 const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
 
@@ -19,6 +20,7 @@ export function getGoogleAuthUrl(env: Env, state: string): string {
   const client = createOAuth2Client(env);
   return client.generateAuthUrl({
     access_type: "offline",
+    prompt: "consent",
     scope: SCOPES,
     include_granted_scopes: true,
     state,
@@ -67,4 +69,16 @@ export async function getSheetsClient(env: Env, userId: string) {
 export async function getDriveClient(env: Env, userId: string) {
   const auth = await getGoogleAuthClient(env, userId);
   return google.drive({ version: "v3", auth });
+}
+
+export async function hasDriveFileScope(env: Env, userId: string): Promise<boolean> {
+  try {
+    const auth = await getGoogleAuthClient(env, userId);
+    const token = await auth.getAccessToken();
+    const accessToken = token.token;
+    if (!accessToken) return false;
+    return accessTokenHasDriveFileScope(accessToken);
+  } catch {
+    return false;
+  }
 }
