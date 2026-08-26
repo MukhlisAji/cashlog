@@ -33,8 +33,8 @@ export function validateIndonesianWaPhone(input: string): PhoneValidationResult 
     return { ok: false, error: "Nomor hanya boleh berisi angka." };
   }
 
-  if (digits.length > 12) {
-    return { ok: false, error: "Nomor maksimal 12 digit." };
+  if (digits.length > 13) {
+    return { ok: false, error: "Nomor maksimal 13 digit." };
   }
 
   const normalized = normalizeDigits(raw);
