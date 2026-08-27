@@ -101,6 +101,7 @@ create table public.user_config (
   daily_tx_date                date,
   last_evening_reminder_date   date,           -- Last 21:00 WIB WA reminder
   last_analytics_report_key    text,           -- Dedup: weekly:YYYY-MM-DD
+  last_monthly_report_key      text,           -- Dedup: monthly:YYYY-MM
   last_trial_end_report_key    text,           -- Dedup: trial hari ke-7
   created_at                   timestamptz not null default now(),
   updated_at                   timestamptz not null default now()
@@ -189,6 +190,9 @@ create table public.households (
   lead_user_id       uuid not null unique
     references public.profiles(id) on delete cascade,
   member_slots_paid  integer not null default 0,
+  notify_members_reminder boolean not null default true,
+  notify_members_weekly   boolean not null default false,
+  notify_members_monthly  boolean not null default false,
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );

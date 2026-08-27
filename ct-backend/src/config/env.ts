@@ -40,6 +40,11 @@ const envSchema = z.object({
     .transform((v) => v === "true"),
   /** snap = one-time Snap per bulan; recurring = Snap + auto-charge bulanan (kartu/GoPay) */
   MIDTRANS_CHECKOUT_MODE: z.enum(["snap", "recurring"]).default("snap"),
+  /** Skip Snap: checkout instantly activates Pro / household slots. */
+  SKIP_PAYMENTS: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
   // Subscription pricing (IDR) & trial
   PRO_PRICE: z.coerce.number().default(49_000),
   /** Pro add-on: IDR per household member slot / month */
@@ -63,6 +68,9 @@ const envSchema = z.object({
   META_API_VERSION: z.string().default("v22.0"),
   META_WEBHOOK_PATH: z.string().default("webhook"),
   META_WA_ONBOARDING_TEMPLATE: z.string().default("onboarding_notif_v1"),
+  META_WA_MEMBER_ONBOARDING_TEMPLATE: z
+    .string()
+    .default("household_member_welcome_v1"),
   META_WA_ONBOARDING_TEMPLATE_LANG: z.string().default("id"),
 });
 

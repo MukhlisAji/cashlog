@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Env } from "../../config/env.js";
 import type { AuthenticatedRequest } from "../../lib/auth.middleware.js";
 import { authWithSubscription, authOnly } from "../../lib/prehandlers.js";
-import { createSlotsSnapCheckout, isMidtransConfigured } from "../../lib/midtrans.js";
+import { createSlotsSnapCheckout, isMidtransConfigured, skipPayments } from "../../lib/midtrans.js";
 import { getUserProfile } from "../../lib/subscription.js";
 import { householdRepository } from "./household.repository.js";
 import type { HouseholdMemberRow } from "./household.types.js";
@@ -13,9 +13,24 @@ import {
   ensureLeadHousehold,
   getHouseholdSummary,
   purchaseMemberSlots,
+  updateMemberNotifyFlags,
 } from "./household.service.js";
 import { parseIndonesianPhone } from "../whatsapp/whatsapp.utils.js";
 import { sendOnboardingTemplateToMemberIfReady } from "../whatsapp/wa-onboarding-template.service.js";
+
+const notifyFlagsSchema = z
+  .object({
+    notifyMembersReminder: z.boolean().optional(),
+    notifyMembersWeekly: z.boolean().optional(),
+    notifyMembersMonthly: z.boolean().optional(),
+  })
+  .refine(
+    (v) =>
+      v.notifyMembersReminder !== undefined ||
+      v.notifyMembersWeekly !== undefined ||
+      v.notifyMembersMonthly !== undefined,
+    { message: "empty" },
+  );
 
 const addMemberSchema = z.object({
   displayName: z.string().min(2).max(64),
@@ -56,6 +71,27 @@ export async function householdRoutes(app: FastifyInstance, env: Env) {
     },
   );
 
+  app.patch(
+    "/household/notify",
+    { preHandler: authWithSubscription },
+    async (request, reply) => {
+      const { userId } = request as AuthenticatedRequest;
+      const parsed = notifyFlagsSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          success: false,
+          error: "Pengaturan notifikasi tidak valid.",
+        });
+      }
+
+      const result = await updateMemberNotifyFlags(userId, parsed.data);
+      if (!result.ok) {
+        return reply.code(400).send({ success: false, error: result.error });
+      }
+      return { success: true, data: result.data };
+    },
+  );
+
   app.post(
     "/household/members",
     { preHandler: authWithSubscription },
@@ -93,7 +129,6 @@ export async function householdRoutes(app: FastifyInstance, env: Env) {
         env,
         userId,
         result.data.phone,
-        result.data.displayName,
       );
 
       return { success: true, data: result.data };
@@ -136,22 +171,22 @@ export async function householdRoutes(app: FastifyInstance, env: Env) {
 
       const slots = parsed.data.slots;
 
-      if (!isMidtransConfigured(env)) {
-        if (env.NODE_ENV === "development") {
-          const result = await purchaseMemberSlots(userId, slots, env);
-          if (!result.ok) {
-            return reply.code(400).send({
-              success: false,
-              error: result.error,
-            });
-          }
-          return {
-            success: true,
-            data: { ...result.data, devActivated: true },
-            message: `${slots} slot anggota diaktifkan (dev mode).`,
-          };
+      if (skipPayments(env)) {
+        const result = await purchaseMemberSlots(userId, slots, env);
+        if (!result.ok) {
+          return reply.code(400).send({
+            success: false,
+            error: result.error,
+          });
         }
+        return {
+          success: true,
+          data: { ...result.data, devActivated: true },
+          message: `${slots} slot anggota diaktifkan (tanpa pembayaran).`,
+        };
+      }
 
+      if (!isMidtransConfigured(env)) {
         return reply.code(503).send({
           success: false,
           error: "Payment gateway belum dikonfigurasi.",

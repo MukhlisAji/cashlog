@@ -158,7 +158,9 @@ export function HouseholdMembersEditor({
 
     setDisplayName("");
     setPhone("");
-    setMessage(`${result.data?.displayName ?? "Anggota"} di-whitelist — chat ke bot akan masuk sheet yang sama.`);
+    setMessage(
+      `${result.data?.displayName ?? "Anggota"} di-whitelist. Kami kirim pesan selamat datang via WhatsApp.`,
+    );
     showToast(NOTICE_MESSAGES.saved.kind, NOTICE_MESSAGES.saved.text);
     await refresh();
   }
@@ -314,6 +316,72 @@ export function HouseholdMembersEditor({
 
         {error && <p className="text-sm text-destructive">{error}</p>}
         {message && <p className="text-sm text-muted-foreground">{message}</p>}
+
+        {household && canManageHousehold ? (
+          <div className="flex flex-col gap-3 rounded-lg border p-4">
+            <div>
+              <p className="text-sm font-medium">WhatsApp ke anggota</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Kamu sebagai pemilik selalu menerima. Toggle ini hanya untuk
+                nomor anggota — tanpa link Google Sheet.
+              </p>
+            </div>
+            {(
+              [
+                {
+                  key: "notifyMembersReminder" as const,
+                  label: "Reminder malam (21.00 WIB)",
+                  hint: "Default aktif. Pengingat harian ke semua anggota.",
+                  checked: household.notifyMembersReminder,
+                },
+                {
+                  key: "notifyMembersWeekly" as const,
+                  label: "Insight Senin (PDF)",
+                  hint: "Laporan mingguan. Default mati.",
+                  checked: household.notifyMembersWeekly,
+                },
+                {
+                  key: "notifyMembersMonthly" as const,
+                  label: "Laporan bulanan (PDF)",
+                  hint: "Dikirim tanggal 1 untuk bulan sebelumnya. Default mati.",
+                  checked: household.notifyMembersMonthly,
+                },
+              ] as const
+            ).map((row) => (
+              <label
+                key={row.key}
+                className="flex cursor-pointer items-start gap-3 text-sm"
+              >
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-4 accent-primary"
+                  checked={row.checked}
+                  disabled={loading}
+                  onChange={(e) => {
+                    void (async () => {
+                      setLoading(true);
+                      const result = await householdService.updateNotifyFlags({
+                        [row.key]: e.target.checked,
+                      });
+                      setLoading(false);
+                      if (!result.success) {
+                        setError(result.error ?? "Gagal menyimpan pengaturan.");
+                        return;
+                      }
+                      await refresh();
+                    })();
+                  }}
+                />
+                <span>
+                  <span className="font-medium">{row.label}</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {row.hint}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+        ) : null}
 
         {hasMembers && (
           <ul className="divide-y rounded-lg border">

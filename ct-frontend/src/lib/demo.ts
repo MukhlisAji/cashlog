@@ -48,6 +48,9 @@ const DEMO_PRO_KEY = "demo_pro_manual";
 const DEMO_TIER_KEY = "demo_tier";
 const DEMO_HOUSEHOLD_SLOTS_KEY = "demo_household_slots";
 const DEMO_HOUSEHOLD_MEMBERS_KEY = "demo_household_members";
+const DEMO_NOTIFY_REMINDER_KEY = "demo_notify_members_reminder";
+const DEMO_NOTIFY_WEEKLY_KEY = "demo_notify_members_weekly";
+const DEMO_NOTIFY_MONTHLY_KEY = "demo_notify_members_monthly";
 
 function ss(): Storage | null {
   if (typeof window === "undefined") return null;
@@ -602,6 +605,9 @@ export function getDemoHouseholdSummary(): HouseholdSummary {
     canManageHousehold: sub.canManageHousehold,
     canInviteMember:
       sub.canManageHousehold && slots > 0 && members.length < slots,
+    notifyMembersReminder: ls()?.getItem(DEMO_NOTIFY_REMINDER_KEY) !== "0",
+    notifyMembersWeekly: ls()?.getItem(DEMO_NOTIFY_WEEKLY_KEY) === "1",
+    notifyMembersMonthly: ls()?.getItem(DEMO_NOTIFY_MONTHLY_KEY) === "1",
     members,
   };
 }
@@ -640,4 +646,21 @@ export function revokeDemoHouseholdMember(memberId: string) {
   saveDemoHouseholdMembers(
     getDemoHouseholdMembersRaw().filter((m) => m.id !== memberId),
   );
+}
+
+export function updateDemoMemberNotifyFlags(flags: {
+  notifyMembersReminder?: boolean;
+  notifyMembersWeekly?: boolean;
+  notifyMembersMonthly?: boolean;
+}) {
+  if (flags.notifyMembersReminder !== undefined) {
+    ls()?.setItem(DEMO_NOTIFY_REMINDER_KEY, flags.notifyMembersReminder ? "1" : "0");
+  }
+  if (flags.notifyMembersWeekly !== undefined) {
+    ls()?.setItem(DEMO_NOTIFY_WEEKLY_KEY, flags.notifyMembersWeekly ? "1" : "0");
+  }
+  if (flags.notifyMembersMonthly !== undefined) {
+    ls()?.setItem(DEMO_NOTIFY_MONTHLY_KEY, flags.notifyMembersMonthly ? "1" : "0");
+  }
+  return getDemoHouseholdSummary();
 }

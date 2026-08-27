@@ -10,7 +10,7 @@ import {
   userConfigRepository,
 } from "../config/config.repository.js";
 import { householdRepository } from "../household/household.repository.js";
-import { sendTextToLeadUser } from "./meta-outbound.service.js";
+import { sendTextToHousehold } from "./meta-outbound.service.js";
 import { buildEveningReminderMessage } from "./wa-command.service.js";
 import {
   fetchYearTransactions,
@@ -74,7 +74,9 @@ async function sendEveningReminderToUser(
   }
 
   const text = buildEveningReminderMessage(todayCount, todayTotal);
-  const sent = await sendTextToLeadUser(userId, text);
+  const household = await householdRepository.getByLeadUserId(userId);
+  const includeMembers = household?.notify_members_reminder !== false;
+  const sent = await sendTextToHousehold(userId, text, includeMembers);
   if (sent) {
     await userConfigRepository.setLastEveningReminderDate(userId, date);
   }

@@ -42,12 +42,49 @@ export async function getHouseholdSummary(leadUserId: string, env: Env) {
       slotsPaid > 0 &&
       activeCount < slotsPaid &&
       activeCount < maxSlots,
+    notifyMembersReminder: household.notify_members_reminder,
+    notifyMembersWeekly: household.notify_members_weekly,
+    notifyMembersMonthly: household.notify_members_monthly,
     members: members.map((m) => ({
       id: m.id,
       displayName: m.display_name,
       phone: m.phone_number,
       status: m.status,
     })),
+  };
+}
+
+export async function updateMemberNotifyFlags(
+  leadUserId: string,
+  flags: {
+    notifyMembersReminder?: boolean;
+    notifyMembersWeekly?: boolean;
+    notifyMembersMonthly?: boolean;
+  },
+) {
+  const sub = await checkSubscription(leadUserId);
+  if (!sub.canManageHousehold) {
+    return {
+      ok: false as const,
+      error: "Pengaturan notifikasi anggota hanya untuk langganan Pro.",
+    };
+  }
+
+  const household = await ensureLeadHousehold(leadUserId);
+  await householdRepository.updateMemberNotifyFlags(household.id, {
+    notify_members_reminder: flags.notifyMembersReminder,
+    notify_members_weekly: flags.notifyMembersWeekly,
+    notify_members_monthly: flags.notifyMembersMonthly,
+  });
+
+  const updated = await householdRepository.getByLeadUserId(leadUserId);
+  return {
+    ok: true as const,
+    data: {
+      notifyMembersReminder: updated?.notify_members_reminder ?? true,
+      notifyMembersWeekly: updated?.notify_members_weekly ?? false,
+      notifyMembersMonthly: updated?.notify_members_monthly ?? false,
+    },
   };
 }
 

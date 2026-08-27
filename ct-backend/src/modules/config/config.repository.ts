@@ -175,6 +175,25 @@ export const userConfigRepository = {
     if (error) throw error;
   },
 
+  async getLastMonthlyReportKey(userId: string): Promise<string | null> {
+    const { data, error } = await sb()
+      .from("user_config")
+      .select("last_monthly_report_key")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) throw error;
+    return data?.last_monthly_report_key ?? null;
+  },
+
+  async setLastMonthlyReportKey(userId: string, reportKey: string): Promise<void> {
+    await userConfigRepository.ensure(userId);
+    const { error } = await sb()
+      .from("user_config")
+      .update({ last_monthly_report_key: reportKey })
+      .eq("user_id", userId);
+    if (error) throw error;
+  },
+
   async getLastTrialEndReportKey(userId: string): Promise<string | null> {
     const { data, error } = await sb()
       .from("user_config")

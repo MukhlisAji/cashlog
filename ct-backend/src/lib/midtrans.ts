@@ -1,5 +1,6 @@
 export {
   isMidtransConfigured,
+  skipPayments,
   verifyMidtransSignature,
   isMidtransPaymentSuccess,
   createSubscriptionSnapCheckout,

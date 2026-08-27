@@ -16,5 +16,8 @@ export interface HouseholdSummary {
   memberPrice: number;
   canManageHousehold: boolean;
   canInviteMember: boolean;
+  notifyMembersReminder: boolean;
+  notifyMembersWeekly: boolean;
+  notifyMembersMonthly: boolean;
   members: HouseholdMember[];
 }

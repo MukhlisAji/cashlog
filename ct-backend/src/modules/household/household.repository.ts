@@ -22,6 +22,9 @@ function mapHousehold(row: Record<string, unknown>): HouseholdRow {
     id: String(row.id),
     lead_user_id: String(row.lead_user_id),
     member_slots_paid: Number(row.member_slots_paid ?? 0),
+    notify_members_reminder: row.notify_members_reminder !== false,
+    notify_members_weekly: row.notify_members_weekly === true,
+    notify_members_monthly: row.notify_members_monthly === true,
   };
 }
 
@@ -280,6 +283,41 @@ export const householdRepository = {
       })
       .eq("id", householdId);
     if (error) throw error;
+  },
+
+  async updateMemberNotifyFlags(
+    householdId: string,
+    flags: {
+      notify_members_reminder?: boolean;
+      notify_members_weekly?: boolean;
+      notify_members_monthly?: boolean;
+    },
+  ): Promise<void> {
+    const patch: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (flags.notify_members_reminder !== undefined) {
+      patch.notify_members_reminder = flags.notify_members_reminder;
+    }
+    if (flags.notify_members_weekly !== undefined) {
+      patch.notify_members_weekly = flags.notify_members_weekly;
+    }
+    if (flags.notify_members_monthly !== undefined) {
+      patch.notify_members_monthly = flags.notify_members_monthly;
+    }
+
+    const { error } = await sb()
+      .from("households")
+      .update(patch)
+      .eq("id", householdId);
+    if (error) throw error;
+  },
+
+  async listActiveMemberPhones(householdId: string): Promise<string[]> {
+    const members = await this.listMembers(householdId);
+    return members
+      .map((m) => m.phone_number)
+      .filter((phone): phone is string => Boolean(phone));
   },
 
   async listLeadUserIdsWithPhone(): Promise<string[]> {

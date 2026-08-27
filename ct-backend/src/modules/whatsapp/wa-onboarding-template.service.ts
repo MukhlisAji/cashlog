@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from "../../lib/supabase.js";
 import { householdRepository } from "../household/household.repository.js";
 import { getSheetStatus } from "../sheets/sheets-setup.service.js";
 import { getMetaService } from "./meta-outbound.service.js";
+import { MEMBER_ONBOARDING_TEMPLATE_NAME } from "./wa-member-welcome.js";
 
 function firstName(fullName: string | null | undefined): string {
   const token =
@@ -68,6 +69,32 @@ export async function sendOnboardingTemplate(
   }
 }
 
+export async function sendMemberOnboardingTemplate(
+  env: Env,
+  phone: string,
+  leadFirstName: string,
+): Promise<boolean> {
+  if (!isMetaWhatsAppConfigured(env) || !phone) return false;
+  const to = phone.replace(/\D/g, "");
+  if (!to) return false;
+
+  try {
+    await getMetaService().sendWhatsAppTemplate({
+      to,
+      templateName: env.META_WA_MEMBER_ONBOARDING_TEMPLATE,
+      languageCode: env.META_WA_ONBOARDING_TEMPLATE_LANG,
+      bodyParameters: [leadFirstName, leadFirstName],
+    });
+    return true;
+  } catch (error) {
+    console.error(
+      { phone: to, error, template: env.META_WA_MEMBER_ONBOARDING_TEMPLATE },
+      `[wa-onboarding-template] failed to send ${MEMBER_ONBOARDING_TEMPLATE_NAME}`,
+    );
+    return false;
+  }
+}
+
 export async function sendOnboardingTemplateToLeadIfReady(
   env: Env,
   userId: string,
@@ -95,9 +122,7 @@ export async function sendOnboardingTemplateToMemberIfReady(
   env: Env,
   leadUserId: string,
   phone: string,
-  displayName: string,
 ): Promise<void> {
-  const sheet = await getSheetStatus(leadUserId);
-  if (!sheet.spreadsheetId) return;
-  await sendOnboardingTemplate(env, phone, displayName, sheet.spreadsheetId);
+  const profile = await getUserProfile(leadUserId);
+  await sendMemberOnboardingTemplate(env, phone, firstName(profile?.full_name));
 }

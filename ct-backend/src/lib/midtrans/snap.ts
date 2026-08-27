@@ -218,3 +218,9 @@ export function isMidtransPaymentSuccess(payload: {
 export function isMidtransConfigured(env: Env): boolean {
   return !!env.MIDTRANS_SERVER_KEY;
 }
+
+/** Instant-activate Pro and household slots (no Snap). */
+export function skipPayments(env: Env): boolean {
+  if (env.SKIP_PAYMENTS) return true;
+  return env.NODE_ENV === "development" && !isMidtransConfigured(env);
+}

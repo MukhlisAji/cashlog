@@ -8,7 +8,8 @@ import {
   userConfigRepository,
 } from "../config/config.repository.js";
 import { fetchAnalyticsData } from "../sheets/sheet-data.service.js";
-import { sendDocumentToLeadUser } from "../whatsapp/meta-outbound.service.js";
+import { householdRepository } from "../household/household.repository.js";
+import { sendDocumentToHousehold } from "../whatsapp/meta-outbound.service.js";
 import { formatMonthLabel } from "../whatsapp/wa-sheet-queries.js";
 import { computeAnalyticsInsights } from "./analytics-insights.js";
 import { buildCategoryColorMap } from "./analytics-colors.js";
@@ -29,6 +30,19 @@ export function resolveWeeklyReportTarget(jakartaDate: string): ReportTarget {
     month,
     reportKey: `weekly:${jakartaDate}`,
     asOfDate: jakartaDate,
+  };
+}
+
+/** Previous calendar month (for sending on the 1st). */
+export function resolveMonthlyReportTarget(jakartaDate: string): ReportTarget {
+  const year = Number(jakartaDate.slice(0, 4));
+  const monthNum = Number(jakartaDate.slice(5, 7));
+  const prev = new Date(Date.UTC(year, monthNum - 2, 1));
+  const month = `${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, "0")}`;
+  return {
+    kind: "monthly",
+    month,
+    reportKey: `monthly:${month}`,
   };
 }
 
@@ -138,7 +152,10 @@ export async function sendAnalyticsReportToUser(
   const sub = await checkSubscription(userId);
   if (!sub.canAccessAnalytics) return false;
 
-  const alreadySent = await userConfigRepository.getLastAnalyticsReportKey(userId);
+  const isMonthly = target.kind === "monthly";
+  const alreadySent = isMonthly
+    ? await userConfigRepository.getLastMonthlyReportKey(userId)
+    : await userConfigRepository.getLastAnalyticsReportKey(userId);
   if (alreadySent === target.reportKey) return false;
 
   let pdf: Buffer | null;
@@ -151,12 +168,27 @@ export async function sendAnalyticsReportToUser(
 
   if (!pdf) return false;
 
+  const household = await householdRepository.getByLeadUserId(userId);
+  const includeMembers = isMonthly
+    ? household?.notify_members_monthly === true
+    : household?.notify_members_weekly === true;
+
   const caption = buildReportCaption(target.kind, target.month);
   const filename = buildReportFilename(target.kind, target.month, target.reportKey);
 
-  const sent = await sendDocumentToLeadUser(userId, pdf, filename, caption);
+  const sent = await sendDocumentToHousehold(
+    userId,
+    pdf,
+    filename,
+    caption,
+    includeMembers,
+  );
   if (sent) {
-    await userConfigRepository.setLastAnalyticsReportKey(userId, target.reportKey);
+    if (isMonthly) {
+      await userConfigRepository.setLastMonthlyReportKey(userId, target.reportKey);
+    } else {
+      await userConfigRepository.setLastAnalyticsReportKey(userId, target.reportKey);
+    }
   }
   return sent;
 }
@@ -165,7 +197,6 @@ export async function runScheduledAnalyticsReports(
   env: Env,
   target: ReportTarget,
 ): Promise<void> {
-  const { householdRepository } = await import("../household/household.repository.js");
   const userIds = await householdRepository.listLeadUserIdsWithPhone();
 
   for (const userId of userIds) {
@@ -192,4 +223,10 @@ export function getReportTargetForToday(): ReportTarget | null {
   }).format(new Date());
   if (!isMondayJakarta(weekday)) return null;
   return resolveWeeklyReportTarget(date);
+}
+
+export function getMonthlyReportTargetForToday(): ReportTarget | null {
+  const { date } = getNowJakarta();
+  if (!date.endsWith("-01")) return null;
+  return resolveMonthlyReportTarget(date);
 }

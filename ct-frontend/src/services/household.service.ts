@@ -6,6 +6,7 @@ import {
   isDemoMode,
   purchaseDemoHouseholdSlots,
   revokeDemoHouseholdMember,
+  updateDemoMemberNotifyFlags,
 } from "@/lib/demo";
 import type { HouseholdSummary } from "@/types/household";
 
@@ -89,6 +90,34 @@ export const householdService = {
 
     return authFetch<void>(`/api/household/members/${memberId}`, {
       method: "DELETE",
+    });
+  },
+
+  async updateNotifyFlags(flags: {
+    notifyMembersReminder?: boolean;
+    notifyMembersWeekly?: boolean;
+    notifyMembersMonthly?: boolean;
+  }) {
+    if (isDemoMode()) {
+      await demoDelay(200);
+      const summary = updateDemoMemberNotifyFlags(flags);
+      return {
+        success: true,
+        data: {
+          notifyMembersReminder: summary.notifyMembersReminder,
+          notifyMembersWeekly: summary.notifyMembersWeekly,
+          notifyMembersMonthly: summary.notifyMembersMonthly,
+        },
+      };
+    }
+
+    return authFetch<{
+      notifyMembersReminder: boolean;
+      notifyMembersWeekly: boolean;
+      notifyMembersMonthly: boolean;
+    }>("/api/household/notify", {
+      method: "PATCH",
+      body: JSON.stringify(flags),
     });
   },
 

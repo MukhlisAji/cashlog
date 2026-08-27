@@ -9,6 +9,7 @@ import {
   disableMidtransSubscription,
   getMidtransTransactionStatus,
   isMidtransConfigured,
+  skipPayments,
   isMidtransPaymentSuccess,
   isRecurringChargeSuccess,
   parseMidtransOrderContext,
@@ -180,23 +181,23 @@ export async function subscriptionRoutes(app: FastifyInstance, env: Env) {
 
       const tier = parsed.data.tier as SubscriptionTier;
 
-      if (!isMidtransConfigured(env)) {
-        if (env.NODE_ENV === "development") {
-          const result = await activateSubscription(userId, tier);
-          if (!result.ok) {
-            return reply.code(500).send({
-              success: false,
-              error: "Gagal mengaktifkan langganan (dev mode).",
-            });
-          }
-          const sub = await checkSubscription(userId);
-          return {
-            success: true,
-            data: { ...sub, devActivated: true },
-            message: `Langganan ${tier} diaktifkan (dev — tanpa Midtrans).`,
-          };
+      if (skipPayments(env)) {
+        const result = await activateSubscription(userId, tier);
+        if (!result.ok) {
+          return reply.code(500).send({
+            success: false,
+            error: "Gagal mengaktifkan langganan.",
+          });
         }
+        const sub = await checkSubscription(userId);
+        return {
+          success: true,
+          data: { ...sub, devActivated: true },
+          message: `Langganan ${tier} diaktifkan (tanpa pembayaran).`,
+        };
+      }
 
+      if (!isMidtransConfigured(env)) {
         return reply.code(503).send({
           success: false,
           error: "Payment gateway belum dikonfigurasi. Hubungi support.",
@@ -397,6 +398,23 @@ export async function subscriptionRoutes(app: FastifyInstance, env: Env) {
         };
       }
 
+      if (skipPayments(env)) {
+        const result = await activateSubscription(userId, "pro");
+        if (!result.ok) {
+          return reply.code(500).send({
+            success: false,
+            error: "Gagal mengaktifkan Pro.",
+          });
+        }
+
+        const sub = await checkSubscription(userId);
+        return {
+          success: true,
+          data: { ...sub, devActivated: true },
+          message: "Pro berhasil diaktifkan (tanpa pembayaran).",
+        };
+      }
+
       if (isMidtransConfigured(env)) {
         return reply.code(400).send({
           success: false,
@@ -405,27 +423,10 @@ export async function subscriptionRoutes(app: FastifyInstance, env: Env) {
         });
       }
 
-      if (env.NODE_ENV !== "development") {
-        return reply.code(503).send({
-          success: false,
-          error: "Payment gateway belum tersedia.",
-        });
-      }
-
-      const result = await activateSubscription(userId, "pro");
-      if (!result.ok) {
-        return reply.code(500).send({
-          success: false,
-          error: "Gagal mengaktifkan Pro.",
-        });
-      }
-
-      const sub = await checkSubscription(userId);
-      return {
-        success: true,
-        data: sub,
-        message: "Pro berhasil diaktifkan (dev mode)",
-      };
+      return reply.code(503).send({
+        success: false,
+        error: "Payment gateway belum tersedia.",
+      });
     },
   );
 

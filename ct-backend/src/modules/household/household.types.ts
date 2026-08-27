@@ -6,6 +6,9 @@ export interface HouseholdRow {
   id: string;
   lead_user_id: string;
   member_slots_paid: number;
+  notify_members_reminder: boolean;
+  notify_members_weekly: boolean;
+  notify_members_monthly: boolean;
 }
 
 export interface HouseholdMemberRow {

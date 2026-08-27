@@ -6,6 +6,9 @@ create table if not exists public.households (
   lead_user_id       uuid not null unique
     references public.profiles(id) on delete cascade,
   member_slots_paid  integer not null default 0,
+  notify_members_reminder boolean not null default true,
+  notify_members_weekly   boolean not null default false,
+  notify_members_monthly  boolean not null default false,
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
