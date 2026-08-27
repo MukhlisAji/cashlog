@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ChevronUp,
   Loader2,
@@ -53,6 +53,25 @@ export function HouseholdMembersEditor({
   const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
   const [confirmRevokeName, setConfirmRevokeName] = useState("");
   const [showAddPanel, setShowAddPanel] = useState(openAddOnMount);
+  const [notifyDraft, setNotifyDraft] = useState({
+    notifyMembersReminder: true,
+    notifyMembersWeekly: false,
+    notifyMembersMonthly: false,
+  });
+  const [notifySaving, setNotifySaving] = useState(false);
+
+  useEffect(() => {
+    if (!household) return;
+    setNotifyDraft({
+      notifyMembersReminder: household.notifyMembersReminder,
+      notifyMembersWeekly: household.notifyMembersWeekly,
+      notifyMembersMonthly: household.notifyMembersMonthly,
+    });
+  }, [
+    household?.notifyMembersReminder,
+    household?.notifyMembersWeekly,
+    household?.notifyMembersMonthly,
+  ]);
 
   if (isLoading) {
     return (
@@ -181,6 +200,34 @@ export function HouseholdMembersEditor({
 
     setMessage("Anggota dicabut dari whitelist.");
     await refresh();
+  }
+
+  const notifyDirty =
+    !!household &&
+    (notifyDraft.notifyMembersReminder !== household.notifyMembersReminder ||
+      notifyDraft.notifyMembersWeekly !== household.notifyMembersWeekly ||
+      notifyDraft.notifyMembersMonthly !== household.notifyMembersMonthly);
+
+  async function handleSaveNotify() {
+    setNotifySaving(true);
+    setError(null);
+    const result = await householdService.updateNotifyFlags(notifyDraft);
+    setNotifySaving(false);
+
+    if (!result.success) {
+      setError(result.error ?? "Gagal menyimpan pengaturan WhatsApp anggota.");
+      showToast(
+        NOTICE_MESSAGES.save_failed.kind,
+        result.error ?? NOTICE_MESSAGES.save_failed.text,
+      );
+      return;
+    }
+
+    await refresh();
+    showToast(
+      NOTICE_MESSAGES.saved.kind,
+      "Pengaturan WhatsApp anggota tersimpan.",
+    );
   }
 
   const hasMembers = (household?.members.length ?? 0) > 0;
@@ -332,19 +379,16 @@ export function HouseholdMembersEditor({
                   key: "notifyMembersReminder" as const,
                   label: "Reminder malam (21.00 WIB)",
                   hint: "Default aktif. Pengingat harian ke semua anggota.",
-                  checked: household.notifyMembersReminder,
                 },
                 {
                   key: "notifyMembersWeekly" as const,
                   label: "Insight Senin (PDF)",
                   hint: "Laporan mingguan. Default mati.",
-                  checked: household.notifyMembersWeekly,
                 },
                 {
                   key: "notifyMembersMonthly" as const,
                   label: "Laporan bulanan (PDF)",
                   hint: "Dikirim tanggal 1 untuk bulan sebelumnya. Default mati.",
-                  checked: household.notifyMembersMonthly,
                 },
               ] as const
             ).map((row) => (
@@ -355,21 +399,13 @@ export function HouseholdMembersEditor({
                 <input
                   type="checkbox"
                   className="mt-0.5 size-4 accent-primary"
-                  checked={row.checked}
-                  disabled={loading}
+                  checked={notifyDraft[row.key]}
+                  disabled={notifySaving || loading}
                   onChange={(e) => {
-                    void (async () => {
-                      setLoading(true);
-                      const result = await householdService.updateNotifyFlags({
-                        [row.key]: e.target.checked,
-                      });
-                      setLoading(false);
-                      if (!result.success) {
-                        setError(result.error ?? "Gagal menyimpan pengaturan.");
-                        return;
-                      }
-                      await refresh();
-                    })();
+                    setNotifyDraft((current) => ({
+                      ...current,
+                      [row.key]: e.target.checked,
+                    }));
                   }}
                 />
                 <span>
@@ -380,6 +416,12 @@ export function HouseholdMembersEditor({
                 </span>
               </label>
             ))}
+            <SettingsSaveButton
+              loading={notifySaving}
+              disabled={!notifyDirty}
+              onClick={() => void handleSaveNotify()}
+              label="Simpan pengaturan WhatsApp"
+            />
           </div>
         ) : null}
 
