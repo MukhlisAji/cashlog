@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import type { FastifyError } from "fastify";
 
 import type { Env } from "./config/env.js";
 import { initSupabase } from "./lib/supabase.js";
@@ -35,7 +36,7 @@ export async function buildApp(env: Env) {
 
   await registerSecurityPlugins(app, env);
 
-  app.setErrorHandler((error, request, reply) => {
+  app.setErrorHandler((error: FastifyError, request, reply) => {
     const status =
       typeof error.statusCode === "number" && error.statusCode >= 400
         ? error.statusCode

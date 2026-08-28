@@ -1,5 +1,7 @@
 import { getAccessToken } from "@/lib/access-token";
 import { fetchApiJson, SESSION_EXPIRED } from "@/lib/api-error";
+import {
+  createDemoCategory,
   deleteDemoCategory,
   demoDelay,
   getDemoCategories,

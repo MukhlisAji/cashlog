@@ -99,6 +99,7 @@ export function CategoriesEditor({ onChange }: CategoriesEditorProps) {
     const toDelete = saved.filter((c) => !draftPersistedIds.has(c.id));
     const toCreate = draft.filter((c) => c.id < 0);
 
+    let failed = false;
     let failMessage = NOTICE_MESSAGES.save_failed.text;
     for (const cat of toDelete) {
       const result = await categoriesService.remove(cat.id);
