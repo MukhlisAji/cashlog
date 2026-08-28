@@ -70,7 +70,8 @@ const envSchema = z.object({
   META_WA_ONBOARDING_TEMPLATE: z.string().default("onboarding_notif_v1"),
   META_WA_MEMBER_ONBOARDING_TEMPLATE: z
     .string()
-    .default("household_member_welcome_v1"),
+    .default("household_welcome_msg_v1"),
+  META_WA_DAILY_REMINDER_TEMPLATE: z.string().default("daily_reminder_v1"),
   META_WA_ONBOARDING_TEMPLATE_LANG: z.string().default("id"),
 });
 

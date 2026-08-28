@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { siteConfig } from "@/config/site";
 import { useAuth } from "@/hooks/use-auth";
+import { toUserFacingErrorFromUnknown } from "@/lib/api-error";
 import {
   shouldShowDemoLogin,
   shouldShowEmailRegister,
@@ -76,8 +77,10 @@ export function RegisterForm({ redirectTo = "/" }: RegisterFormProps) {
       router.push(redirectTo);
       router.refresh();
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Pendaftaran gagal. Coba lagi.";
+      const message = toUserFacingErrorFromUnknown(
+        err,
+        "Pendaftaran gagal. Coba lagi.",
+      );
       if (message.toLowerCase().includes("already registered")) {
         setError("Email sudah terdaftar. Silakan masuk.");
       } else {

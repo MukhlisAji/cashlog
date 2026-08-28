@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/hooks/use-auth";
+import { toUserFacingErrorFromUnknown } from "@/lib/api-error";
 import {
   shouldShowDemoLogin,
   shouldShowEmailLogin,
@@ -55,12 +56,11 @@ export function LoginForm({ redirectTo = "/", hasError }: LoginFormProps) {
       router.push(redirectTo);
       router.refresh();
     } catch (err) {
+      const message = toUserFacingErrorFromUnknown(err, "Login gagal. Coba lagi.");
       setError(
-        err instanceof Error
-          ? err.message.includes("Invalid login")
-            ? "Email atau password salah."
-            : err.message
-          : "Login gagal",
+        message.toLowerCase().includes("invalid login")
+          ? "Email atau password salah."
+          : message,
       );
       setIsLoading(false);
     }
@@ -75,12 +75,14 @@ export function LoginForm({ redirectTo = "/", hasError }: LoginFormProps) {
       router.push(redirectTo);
       router.refresh();
     } catch (err) {
+      const message = toUserFacingErrorFromUnknown(
+        err,
+        "Login gagal. Coba lagi.",
+      );
       setError(
-        err instanceof Error
-          ? err.message.includes("Invalid login")
-            ? "Email/password salah. Jalankan: npm run seed:test-user"
-            : err.message
-          : "Login gagal",
+        message.toLowerCase().includes("invalid login")
+          ? "Email/password salah. Jalankan: npm run seed:test-user"
+          : message,
       );
       setIsLoading(false);
     }

@@ -575,3 +575,18 @@ export class MetaService {
     return { messages, statuses };
   }
 }
+
+/** Meta 131047: session message outside the 24-hour customer care window. */
+export function isMetaSessionWindowClosed(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return /131047|outside the allowed window|re-engagement/i.test(String(error));
+  }
+  const e = error as {
+    message?: string;
+    response?: { error?: { code?: number; error_subcode?: number; message?: string } };
+  };
+  const code = e.response?.error?.code;
+  if (code === 131047) return true;
+  const text = `${e.message ?? ""} ${e.response?.error?.message ?? ""}`;
+  return /131047|outside the allowed window|re-engagement/i.test(text);
+}

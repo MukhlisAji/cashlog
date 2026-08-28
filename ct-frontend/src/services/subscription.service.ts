@@ -1,6 +1,5 @@
 import { getAccessToken } from "@/lib/access-token";
-import {
-  createDemoCategory,
+import { fetchApiJson, SESSION_EXPIRED } from "@/lib/api-error";
   deleteDemoCategory,
   demoDelay,
   getDemoCategories,
@@ -53,6 +52,26 @@ export interface CheckoutData {
 
 const PENDING_ORDER_KEY = "cashlog_pending_order_id";
 
+async function authedJson<T>(
+  path: string,
+  options: RequestInit = {},
+) {
+  const token = await getAccessToken();
+  if (!token) {
+    return { success: false as const, error: SESSION_EXPIRED, code: "UNAUTHORIZED" };
+  }
+  return fetchApiJson<T>(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(options.body
+        ? { "Content-Type": "application/json" }
+        : {}),
+      ...(options.headers as Record<string, string> | undefined),
+    },
+  });
+}
+
 export function setPendingPaymentOrderId(orderId: string): void {
   if (typeof window === "undefined") return;
   sessionStorage.setItem(PENDING_ORDER_KEY, orderId);
@@ -72,16 +91,7 @@ export const subscriptionService = {
       return { success: true, data: getMockSubscriptionStatus() };
     }
 
-    const token = await getAccessToken();
-    if (!token) {
-      return { success: false, error: "Not authenticated", code: "UNAUTHORIZED" };
-    }
-
-    const response = await fetch(`${API_URL}/api/subscription/status`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    return response.json() as Promise<ApiResponse<SubscriptionStatusData>>;
+    return authedJson<SubscriptionStatusData>("/api/subscription/status");
   },
 
   async startTrial() {
@@ -91,25 +101,9 @@ export const subscriptionService = {
       return { success: true, data: getMockSubscriptionStatus() };
     }
 
-    const token = await getAccessToken();
-    if (!token) {
-      return { success: false, error: "Not authenticated", code: "UNAUTHORIZED" };
-    }
-
-    const response = await fetch(`${API_URL}/api/subscription/start-trial`, {
+    return authedJson<SubscriptionStatusData>("/api/subscription/start-trial", {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
     });
-
-    const body = (await response.json()) as ApiResponse<SubscriptionStatusData>;
-    if (response.status === 401) {
-      return {
-        success: false,
-        error: body.error ?? "Invalid token",
-        code: "UNAUTHORIZED",
-      };
-    }
-    return body;
   },
 
   async checkout(tier: SubscriptionTier) {
@@ -125,23 +119,13 @@ export const subscriptionService = {
       };
     }
 
-    const token = await getAccessToken();
-    if (!token) {
-      return { success: false, error: "Not authenticated", code: "UNAUTHORIZED" };
-    }
-
-    const response = await fetch(`${API_URL}/api/subscription/checkout`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+    const json = await authedJson<SubscriptionStatusData & CheckoutData>(
+      "/api/subscription/checkout",
+      {
+        method: "POST",
+        body: JSON.stringify({ tier }),
       },
-      body: JSON.stringify({ tier }),
-    });
-
-    const json = (await response.json()) as ApiResponse<
-      SubscriptionStatusData & CheckoutData
-    >;
+    );
 
     if (json.success && json.data && "devActivated" in json.data) {
       return {
@@ -169,7 +153,7 @@ export const subscriptionService = {
 
     return {
       success: false,
-      error: json.error ?? "Checkout gagal",
+      error: json.error ?? "Gagal membuat pembayaran. Coba lagi.",
       code: json.code,
     };
   },
@@ -179,23 +163,13 @@ export const subscriptionService = {
       return { success: true, data: getMockSubscriptionStatus() };
     }
 
-    const token = await getAccessToken();
-    if (!token) {
-      return { success: false, error: "Not authenticated", code: "UNAUTHORIZED" };
-    }
-
-    const response = await fetch(`${API_URL}/api/subscription/confirm-payment`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+    return authedJson<SubscriptionStatusData & { paymentPending?: boolean }>(
+      "/api/subscription/confirm-payment",
+      {
+        method: "POST",
+        body: JSON.stringify({ orderId }),
       },
-      body: JSON.stringify({ orderId }),
-    });
-
-    return response.json() as Promise<
-      ApiResponse<SubscriptionStatusData & { paymentPending?: boolean }>
-    >;
+    );
   },
 
   async cancelRenewal() {
@@ -203,17 +177,9 @@ export const subscriptionService = {
       return { success: true, message: "Demo — perpanjangan otomatis dibatalkan." };
     }
 
-    const token = await getAccessToken();
-    if (!token) {
-      return { success: false, error: "Not authenticated", code: "UNAUTHORIZED" };
-    }
-
-    const response = await fetch(`${API_URL}/api/subscription/cancel-renewal`, {
+    return authedJson<void>("/api/subscription/cancel-renewal", {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
     });
-
-    return response.json() as Promise<ApiResponse<void>>;
   },
 
   /** @deprecated Use checkout('pro') */
@@ -242,16 +208,7 @@ export const categoriesService = {
       return { success: true, data: getDemoCategories() };
     }
 
-    const token = await getAccessToken();
-    if (!token) {
-      return { success: false, error: "Not authenticated", code: "UNAUTHORIZED" };
-    }
-
-    const response = await fetch(`${API_URL}/api/categories`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    return response.json() as Promise<ApiResponse<Category[]>>;
+    return authedJson<Category[]>("/api/categories");
   },
 
   async create(name: string, keywords?: string) {
@@ -272,21 +229,10 @@ export const categoriesService = {
       return { success: true, data: created };
     }
 
-    const token = await getAccessToken();
-    if (!token) {
-      return { success: false, error: "Not authenticated", code: "UNAUTHORIZED" };
-    }
-
-    const response = await fetch(`${API_URL}/api/categories`, {
+    return authedJson<Category>("/api/categories", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify({ name, keywords }),
     });
-
-    return response.json() as Promise<ApiResponse<Category>>;
   },
 
   async update(id: number, data: { keywords?: string; name?: string }) {
@@ -300,25 +246,14 @@ export const categoriesService = {
       }
       await demoDelay(300);
       const updated = updateDemoCategory(id, data);
-      if (!updated) return { success: false, error: "Not found" };
+      if (!updated) return { success: false, error: "Kategori tidak ditemukan." };
       return { success: true, data: updated };
     }
 
-    const token = await getAccessToken();
-    if (!token) {
-      return { success: false, error: "Not authenticated", code: "UNAUTHORIZED" };
-    }
-
-    const response = await fetch(`${API_URL}/api/categories/${id}`, {
+    return authedJson<Category>(`/api/categories/${id}`, {
       method: "PATCH",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify(data),
     });
-
-    return response.json() as Promise<ApiResponse<Category>>;
   },
 
   async remove(id: number) {
@@ -341,16 +276,6 @@ export const categoriesService = {
       return { success: true };
     }
 
-    const token = await getAccessToken();
-    if (!token) {
-      return { success: false, error: "Not authenticated", code: "UNAUTHORIZED" };
-    }
-
-    const response = await fetch(`${API_URL}/api/categories/${id}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    return response.json() as Promise<ApiResponse<void>>;
+    return authedJson<void>(`/api/categories/${id}`, { method: "DELETE" });
   },
 };

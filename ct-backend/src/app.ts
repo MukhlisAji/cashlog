@@ -35,6 +35,38 @@ export async function buildApp(env: Env) {
 
   await registerSecurityPlugins(app, env);
 
+  app.setErrorHandler((error, request, reply) => {
+    const status =
+      typeof error.statusCode === "number" && error.statusCode >= 400
+        ? error.statusCode
+        : 500;
+    const code = (error as { code?: string }).code ?? "";
+    const isFramework = code.startsWith("FST_ERR") || status >= 500;
+
+    if (isFramework) {
+      request.log.error(error);
+    }
+
+    const message =
+      status === 401
+        ? "Sesi berakhir. Masuk lagi untuk melanjutkan."
+        : status === 403
+          ? "Akses ditolak. Periksa langganan atau masuk lagi."
+          : status === 404
+            ? "Data tidak ditemukan."
+            : status === 429
+              ? "Terlalu banyak permintaan. Coba lagi sebentar."
+              : status >= 500
+                ? "Terjadi gangguan di server. Coba lagi sebentar."
+                : "Data tidak valid. Periksa isian lalu coba lagi.";
+
+    return reply.code(status).send({
+      success: false,
+      error: message,
+      code: code.startsWith("FST_ERR") ? "REQUEST_INVALID" : code || undefined,
+    });
+  });
+
   await app.register(cors, {
     origin: env.CORS_ORIGIN,
     credentials: true,

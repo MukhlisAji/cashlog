@@ -112,7 +112,7 @@ export function BudgetsEditor() {
     } else {
       showToast(
         NOTICE_MESSAGES.save_failed.kind,
-        NOTICE_MESSAGES.save_failed.text,
+        result.error ?? NOTICE_MESSAGES.save_failed.text,
       );
     }
 

@@ -1,4 +1,5 @@
 import { getAccessToken } from "@/lib/access-token";
+import { fetchApiJson, SESSION_EXPIRED } from "@/lib/api-error";
 import {
   demoDelay,
   getMockSheetStatus,
@@ -21,41 +22,19 @@ async function apiFetch<T>(
 ): Promise<ApiResponse<T>> {
   const token = await getAccessToken();
   if (!token) {
-    return { success: false, error: "Not authenticated" };
+    return { success: false, error: SESSION_EXPIRED };
   }
 
-  const hasBody =
-    options.body !== undefined && options.body !== null;
+  const hasBody = options.body !== undefined && options.body !== null;
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     ...(options.headers as Record<string, string> | undefined),
   };
-  // Only set Content-Type: application/json when there is an actual JSON body.
-  // This avoids Fastify's FST_ERR_CTP_EMPTY_JSON_BODY on GET/bodyless requests
-  // that happen to inherit the header from defaults.
   if (hasBody && !("Content-Type" in headers) && !("content-type" in headers)) {
     headers["Content-Type"] = "application/json";
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers,
-  });
-
-  const body = (await response.json()) as ApiResponse<T> & {
-    message?: string;
-  };
-
-  if (!response.ok && body.success !== true) {
-    return {
-      success: false,
-      error: body.error ?? body.message ?? "Request failed",
-      code: body.code,
-      data: body.data,
-    };
-  }
-
-  return body;
+  return fetchApiJson<T>(`${API_URL}${path}`, { ...options, headers });
 }
 
 export interface SheetStatus {

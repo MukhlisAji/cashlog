@@ -1,4 +1,5 @@
 import { getAccessToken } from "@/lib/access-token";
+import { fetchApiJson, SESSION_EXPIRED } from "@/lib/api-error";
 import {
   demoDelay,
   getDemoBudgets,
@@ -35,14 +36,12 @@ export const budgetsService = {
     }
 
     const token = await getAccessToken();
-    if (!token) return { success: false, error: "Not authenticated" };
+    if (!token) return { success: false, error: SESSION_EXPIRED };
 
     const params = month ? `?month=${encodeURIComponent(month)}` : "";
-    const response = await fetch(`${API_URL}/api/budgets${params}`, {
+    return fetchApiJson<BudgetsData>(`${API_URL}/api/budgets${params}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-
-    return response.json() as Promise<ApiResponse<BudgetsData>>;
   },
 
   async save(budgets: BudgetItem[], month?: string) {
@@ -53,9 +52,9 @@ export const budgetsService = {
     }
 
     const token = await getAccessToken();
-    if (!token) return { success: false, error: "Not authenticated" };
+    if (!token) return { success: false, error: SESSION_EXPIRED };
 
-    const response = await fetch(`${API_URL}/api/budgets`, {
+    return fetchApiJson<BudgetsData>(`${API_URL}/api/budgets`, {
       method: "PUT",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -63,7 +62,5 @@ export const budgetsService = {
       },
       body: JSON.stringify({ month, budgets }),
     });
-
-    return response.json() as Promise<ApiResponse<BudgetsData>>;
   },
 };

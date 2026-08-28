@@ -1,4 +1,5 @@
 import { getAccessToken } from "@/lib/access-token";
+import { fetchApiJson, SESSION_EXPIRED, toUserFacingError } from "@/lib/api-error";
 import {
   demoDelay,
   getDemoAnalyticsData,
@@ -45,14 +46,13 @@ export const analyticsService = {
     }
 
     const token = await getAccessToken();
-    if (!token) return { success: false, error: "Not authenticated" };
+    if (!token) return { success: false, error: SESSION_EXPIRED };
 
     const params = month ? `?month=${encodeURIComponent(month)}` : "";
-    const response = await fetch(`${API_URL}/api/dashboard/analytics${params}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    return response.json() as Promise<ApiResponse<AnalyticsData | null>>;
+    return fetchApiJson<AnalyticsData | null>(
+      `${API_URL}/api/dashboard/analytics${params}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
   },
 
   async exportPdf(month?: string): Promise<{ ok: boolean; error?: string }> {
@@ -61,33 +61,45 @@ export const analyticsService = {
     }
 
     const token = await getAccessToken();
-    if (!token) return { ok: false, error: "Not authenticated" };
+    if (!token) return { ok: false, error: SESSION_EXPIRED };
 
     const params = month ? `?month=${encodeURIComponent(month)}` : "";
-    const response = await fetch(
-      `${API_URL}/api/dashboard/analytics/export${params}`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
+    try {
+      const response = await fetch(
+        `${API_URL}/api/dashboard/analytics/export${params}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
 
-    if (!response.ok) {
-      const body = (await response.json().catch(() => ({}))) as {
-        error?: string;
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          message?: string;
+          code?: string;
+        };
+        return {
+          ok: false,
+          error: toUserFacingError(body, response.status, "Gagal mengunduh PDF."),
+        };
+      }
+
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition");
+      const filenameMatch = disposition?.match(/filename="(.+)"/);
+      const filename = filenameMatch?.[1] ?? "cashlog-analitik.pdf";
+
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+
+      return { ok: true };
+    } catch {
+      return {
+        ok: false,
+        error: "Tidak terhubung ke server. Periksa internet lalu coba lagi.",
       };
-      return { ok: false, error: body.error ?? "Export PDF gagal" };
     }
-
-    const blob = await response.blob();
-    const disposition = response.headers.get("Content-Disposition");
-    const filenameMatch = disposition?.match(/filename="(.+)"/);
-    const filename = filenameMatch?.[1] ?? "cashlog-analitik.pdf";
-
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = filename;
-    anchor.click();
-    URL.revokeObjectURL(url);
-
-    return { ok: true };
   },
 };

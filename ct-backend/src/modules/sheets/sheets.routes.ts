@@ -27,7 +27,7 @@ export async function sheetsRoutes(app: FastifyInstance, env: Env) {
       if (!isGoogleConfigured(env)) {
         return reply.code(503).send({
           success: false,
-          error: "Google OAuth not configured on server",
+          error: "Google belum dikonfigurasi di server. Hubungi support.",
         });
       }
 
@@ -113,7 +113,7 @@ export async function sheetsRoutes(app: FastifyInstance, env: Env) {
       if (!body.refresh_token?.trim()) {
         return reply.code(400).send({
           success: false,
-          error: "refresh_token is required",
+          error: "Sesi Google tidak lengkap. Masuk ulang dengan Google.",
         });
       }
 
@@ -130,8 +130,7 @@ export async function sheetsRoutes(app: FastifyInstance, env: Env) {
         request.log.error(error);
         return reply.code(400).send({
           success: false,
-          error:
-            error instanceof Error ? error.message : "Failed to save Google token",
+          error: "Gagal menyimpan akun Google. Coba hubungkan ulang.",
         });
       }
     },
@@ -171,8 +170,7 @@ export async function sheetsRoutes(app: FastifyInstance, env: Env) {
         }
         return reply.code(400).send({
           success: false,
-          error:
-            error instanceof Error ? error.message : "Sheet setup failed",
+          error: "Gagal membuat Google Sheet. Coba lagi.",
         });
       }
     },

@@ -1,4 +1,5 @@
 import { getAccessToken } from "@/lib/access-token";
+import { fetchApiJson, SESSION_EXPIRED } from "@/lib/api-error";
 import {
   demoDelay,
   getMockDashboardData,
@@ -62,12 +63,10 @@ export const dashboardService = {
     }
 
     const token = await getAccessToken();
-    if (!token) return { success: false, error: "Not authenticated" };
+    if (!token) return { success: false, error: SESSION_EXPIRED };
 
-    const response = await fetch(`${API_URL}/api/dashboard`, {
+    return fetchApiJson<DashboardData>(`${API_URL}/api/dashboard`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-
-    return response.json() as Promise<ApiResponse<DashboardData>>;
   },
 };

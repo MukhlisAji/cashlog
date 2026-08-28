@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ROUTES } from "@/lib/constants";
+import { toUserFacingErrorFromUnknown } from "@/lib/api-error";
 import { isGoogleScopeMissing } from "@/lib/google-consent";
 import { createClient } from "@/lib/supabase/client";
 import { authService } from "@/services/auth.service";
@@ -100,7 +101,9 @@ function ConnectSheetsInner() {
       await authService.signInWithGoogleSheets(redirect, user.email ?? undefined);
     } catch (err) {
       setBusy(false);
-      setError(err instanceof Error ? err.message : "Gagal membuka Google.");
+      setError(
+        toUserFacingErrorFromUnknown(err, "Gagal membuka Google. Coba lagi."),
+      );
     }
   }
 

@@ -10,8 +10,14 @@ import {
   userConfigRepository,
 } from "../config/config.repository.js";
 import { householdRepository } from "../household/household.repository.js";
-import { sendTextToHousehold } from "./meta-outbound.service.js";
+import { getMetaService } from "./meta-outbound.service.js";
+import { isMetaSessionWindowClosed } from "./meta-cloud.service.js";
 import { buildEveningReminderMessage } from "./wa-command.service.js";
+import { DAILY_REMINDER_TEMPLATE_NAME } from "./wa-daily-reminder.js";
+import {
+  bumpReminderTemplateStreak,
+  canSendReminderTemplate,
+} from "./wa-reminder-streak.js";
 import {
   fetchYearTransactions,
   filterTransactionsByDate,
@@ -76,9 +82,61 @@ async function sendEveningReminderToUser(
   const text = buildEveningReminderMessage(todayCount, todayTotal);
   const household = await householdRepository.getByLeadUserId(userId);
   const includeMembers = household?.notify_members_reminder !== false;
-  const sent = await sendTextToHousehold(userId, text, includeMembers);
-  if (sent) {
+  const lead = await householdRepository.getLeadPhone(userId);
+  if (!lead) return;
+
+  const phones = [lead];
+  if (includeMembers) {
+    for (const phone of await householdRepository.listActiveMemberPhones(userId)) {
+      if (!phones.includes(phone)) phones.push(phone);
+    }
+  }
+
+  let anyOk = false;
+  for (const phone of phones) {
+    const ok = await sendReminderToPhone(env, phone, text, todayCount, date);
+    if (ok) anyOk = true;
+  }
+
+  if (anyOk) {
     await userConfigRepository.setLastEveningReminderDate(userId, date);
+  }
+}
+
+async function sendReminderToPhone(
+  env: Env,
+  phone: string,
+  text: string,
+  todayCount: number,
+  today: string,
+): Promise<boolean> {
+  try {
+    await getMetaService().sendWhatsAppMessage(phone, text);
+    return true;
+  } catch (error) {
+    if (!isMetaSessionWindowClosed(error)) {
+      console.error({ phone, error }, "[wa-reminder] session send failed");
+      return false;
+    }
+  }
+
+  if (todayCount > 0) return false;
+  if (!(await canSendReminderTemplate(phone, today))) return false;
+
+  try {
+    await getMetaService().sendWhatsAppTemplate({
+      to: phone.replace(/\D/g, ""),
+      templateName: env.META_WA_DAILY_REMINDER_TEMPLATE,
+      languageCode: env.META_WA_ONBOARDING_TEMPLATE_LANG,
+    });
+    await bumpReminderTemplateStreak(phone, today);
+    return true;
+  } catch (error) {
+    console.error(
+      { phone, error, template: DAILY_REMINDER_TEMPLATE_NAME },
+      "[wa-reminder] daily_reminder_v1 failed",
+    );
+    return false;
   }
 }
 

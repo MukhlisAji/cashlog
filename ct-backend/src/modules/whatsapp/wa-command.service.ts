@@ -130,18 +130,19 @@ export function buildEveningReminderMessage(
 ): string {
   if (todayCount > 0) {
     return [
-      "🌙 *Reminder cashlog.id*",
+      "*Reminder cashlog.id*",
       "",
       `Hari ini kamu sudah catat ${todayCount} transaksi — total Rp ${formatRupiah(todayTotal)}.`,
       "Good job! Besok lanjut ya 💪",
+      "Ketik *menu* untuk melihat daftar perintah.",
     ].join("\n");
   }
 
   return [
-    "🌙 *Reminder cashlog.id*",
+    "*Reminder cashlog.id*",
     "",
     "Hari ini belum ada catatan pengeluaran.",
-    'Kirim aja singkat: "Beli kopi 20rb" ☕',
-    "Ketik *bantuan* untuk menu.",
+    'Kirim aja singkat: "Beli kopi 20rb"',
+    "Ketik *menu* untuk melihat daftar perintah.",
   ].join("\n");
 }

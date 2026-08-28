@@ -99,11 +99,12 @@ export function CategoriesEditor({ onChange }: CategoriesEditorProps) {
     const toDelete = saved.filter((c) => !draftPersistedIds.has(c.id));
     const toCreate = draft.filter((c) => c.id < 0);
 
-    let failed = false;
+    let failMessage = NOTICE_MESSAGES.save_failed.text;
     for (const cat of toDelete) {
       const result = await categoriesService.remove(cat.id);
       if (!result.success) {
         failed = true;
+        failMessage = result.error ?? failMessage;
         break;
       }
     }
@@ -112,16 +113,14 @@ export function CategoriesEditor({ onChange }: CategoriesEditorProps) {
         const result = await categoriesService.create(cat.name, cat.keywords ?? undefined);
         if (!result.success) {
           failed = true;
+          failMessage = result.error ?? failMessage;
           break;
         }
       }
     }
 
     if (failed) {
-      showToast(
-        NOTICE_MESSAGES.save_failed.kind,
-        NOTICE_MESSAGES.save_failed.text,
-      );
+      showToast(NOTICE_MESSAGES.save_failed.kind, failMessage);
       setIsSaving(false);
       return;
     }

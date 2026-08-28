@@ -30,6 +30,7 @@ import {
 } from "./wa-link-code.service.js";
 import { tryHandleWaCommand } from "./wa-command.service.js";
 import { claimUnregisteredNotice } from "./wa-message-dedup.js";
+import { resetReminderTemplateStreak } from "./wa-reminder-streak.js";
 
 const FAST_PATH_RE = /\b(bantuan|help|menu|\?|hari ini|ringkasan|terakhir)\b/i;
 const HAS_AMOUNT_HINT_RE = /\d/;
@@ -520,5 +521,8 @@ async function persistProcessedTransactions(
 
   await appendTransactions(env, ctx.leadUserId, spreadsheetId, sheetRows);
   await setOocCount(ctx.leadUserId, 0);
+  if (ctx.phoneNumber) {
+    await resetReminderTemplateStreak(ctx.phoneNumber);
+  }
   return formatBulkReply(parsed.dynamic_greeting, normalized, time);
 }

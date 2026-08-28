@@ -64,7 +64,10 @@ export async function categoriesRoutes(app: FastifyInstance) {
       const parsed = createCategorySchema.safeParse(request.body);
 
       if (!parsed.success) {
-        return reply.code(400).send({ success: false, error: "Invalid input" });
+        return reply.code(400).send({
+          success: false,
+          error: "Data kategori tidak valid.",
+        });
       }
 
       const existing = await categoriesRepository.listByUser(userId);
@@ -86,7 +89,10 @@ export async function categoriesRoutes(app: FastifyInstance) {
       const parsed = updateCategorySchema.safeParse(request.body);
 
       if (!parsed.success) {
-        return reply.code(400).send({ success: false, error: "Invalid input" });
+        return reply.code(400).send({
+          success: false,
+          error: "Data kategori tidak valid.",
+        });
       }
 
       if (
@@ -103,7 +109,10 @@ export async function categoriesRoutes(app: FastifyInstance) {
       );
 
       if (!updated) {
-        return reply.code(404).send({ success: false, error: "Not found" });
+        return reply.code(404).send({
+          success: false,
+          error: "Kategori tidak ditemukan.",
+        });
       }
 
       return { success: true, data: updated };

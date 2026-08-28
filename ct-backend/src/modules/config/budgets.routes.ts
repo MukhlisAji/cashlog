@@ -42,7 +42,10 @@ export async function budgetsRoutes(app: FastifyInstance) {
       const parsed = upsertBudgetsSchema.safeParse(request.body);
 
       if (!parsed.success) {
-        return reply.code(400).send({ success: false, error: "Invalid input" });
+        return reply.code(400).send({
+          success: false,
+          error: "Data budget tidak valid.",
+        });
       }
 
       const month =

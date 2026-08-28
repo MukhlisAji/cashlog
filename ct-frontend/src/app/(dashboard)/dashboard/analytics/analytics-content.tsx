@@ -172,6 +172,7 @@ export function AnalyticsContent() {
     useWhatsAppStatus();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -191,6 +192,7 @@ export function AnalyticsContent() {
 
   const load = useCallback(async (month?: string) => {
     setIsLoading(true);
+    setLoadError(null);
 
     const result = await analyticsService.getAnalytics(month);
     if (result.success) {
@@ -200,6 +202,7 @@ export function AnalyticsContent() {
       }
     } else {
       setData(null);
+      setLoadError(result.error ?? "Gagal memuat ringkasan. Coba lagi.");
     }
     setIsLoading(false);
   }, []);
@@ -222,7 +225,7 @@ export function AnalyticsContent() {
     const result = await analyticsService.exportPdf(selectedMonth);
     setIsExporting(false);
     if (!result.ok) {
-      setExportError(result.error ?? "Export PDF gagal");
+      setExportError(result.error ?? "Gagal mengunduh PDF. Coba lagi.");
     }
   }
 
@@ -307,6 +310,26 @@ export function AnalyticsContent() {
           </CardContent>
         </Card>
       </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Gagal memuat ringkasan</CardTitle>
+          <CardDescription>{loadError}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void load(selectedMonth ?? undefined)}
+          >
+            Coba lagi
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 

@@ -1,4 +1,5 @@
 import { getAccessToken } from "@/lib/access-token";
+import { fetchApiJson, SESSION_EXPIRED } from "@/lib/api-error";
 import {
   demoDelay,
   getMockWhatsAppStatus,
@@ -21,32 +22,19 @@ async function apiFetch<T>(
 ): Promise<ApiResponse<T>> {
   const token = await getAccessToken();
   if (!token) {
-    return { success: false, error: "Not authenticated" };
+    return { success: false, error: SESSION_EXPIRED };
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      ...options.headers,
-    },
-  });
-
-  const body = (await response.json()) as ApiResponse<T> & {
-    message?: string;
+  const hasBody = options.body !== undefined && options.body !== null;
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    ...(options.headers as Record<string, string> | undefined),
   };
-
-  if (!response.ok && body.success !== true) {
-    return {
-      success: false,
-      error: body.error ?? body.message ?? "Request failed",
-      code: body.code,
-      data: body.data,
-    };
+  if (hasBody && !("Content-Type" in headers) && !("content-type" in headers)) {
+    headers["Content-Type"] = "application/json";
   }
 
-  return body;
+  return fetchApiJson<T>(`${API_URL}${path}`, { ...options, headers });
 }
 
 export type WhatsAppStatus = "idle" | "connected" | "error";

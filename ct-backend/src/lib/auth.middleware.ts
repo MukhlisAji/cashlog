@@ -16,13 +16,17 @@ export async function authenticate(
   if (!supabase) {
     return reply.code(503).send({
       success: false,
-      error: "Auth service unavailable. Configure Supabase on backend.",
+      error: "Layanan masuk sedang tidak tersedia. Coba lagi sebentar.",
     });
   }
 
   const authHeader = request.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
-    return reply.code(401).send({ success: false, error: "Unauthorized" });
+    return reply.code(401).send({
+      success: false,
+      error: "Sesi berakhir. Masuk lagi untuk melanjutkan.",
+      code: "UNAUTHORIZED",
+    });
   }
 
   const token = authHeader.slice(7);
@@ -32,7 +36,11 @@ export async function authenticate(
   } = await supabase.auth.getUser(token);
 
   if (error || !user) {
-    return reply.code(401).send({ success: false, error: "Invalid token" });
+    return reply.code(401).send({
+      success: false,
+      error: "Sesi berakhir. Masuk lagi untuk melanjutkan.",
+      code: "UNAUTHORIZED",
+    });
   }
 
   (request as AuthenticatedRequest).userId = user.id;
