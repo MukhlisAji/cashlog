@@ -156,6 +156,30 @@ export async function addWhitelistedMember(
   };
 }
 
+export async function revokeWhitelistedMember(
+  leadUserId: string,
+  memberId: string,
+) {
+  const household = await ensureLeadHousehold(leadUserId);
+  await householdRepository.revokeMember(memberId);
+
+  const activeCount = await householdRepository.countActiveMemberSlots(
+    household.id,
+  );
+  const nextSlots = Math.max(
+    activeCount,
+    Math.max(0, household.member_slots_paid - 1),
+  );
+  if (nextSlots !== household.member_slots_paid) {
+    await householdRepository.setMemberSlotsPaid(household.id, nextSlots);
+  }
+
+  return {
+    ok: true as const,
+    data: { memberSlotsPaid: nextSlots, activeMemberCount: activeCount },
+  };
+}
+
 export async function setLeadWhatsAppPhone(leadUserId: string, phone: string) {
   await ensureLeadHousehold(leadUserId);
 

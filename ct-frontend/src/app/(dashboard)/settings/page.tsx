@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { ExternalLink, Zap } from "lucide-react";
+import { ExternalLink, TriangleAlert, Zap } from "lucide-react";
 import { BudgetsEditor } from "@/components/settings/budgets-editor";
 import { CategoriesEditor } from "@/components/settings/categories-editor";
 import { HouseholdMembersEditor } from "@/components/settings/household-members-editor";
@@ -266,6 +266,20 @@ export default function SettingsPage() {
                     <ExternalLink className="size-4" />
                     Buka Google Sheet
                   </Button>
+                )}
+                {sheetConnected && (
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
+                    <p className="flex items-start gap-2">
+                      <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
+                      <span>
+                        Mohon tidak mengubah struktur kolom, nama tab, atau
+                        memindahkan file ini. Melakukannya akan memutus
+                        otomatisasi WhatsApp. Data ini sepenuhnya milik Anda;
+                        Cashlog.id tidak bertanggung jawab atas kerusakan sistem
+                        atau data akibat modifikasi manual.
+                      </span>
+                    </p>
+                  </div>
                 )}
               </CardContent>
             </Card>

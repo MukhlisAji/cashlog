@@ -13,6 +13,7 @@ import {
   ensureLeadHousehold,
   getHouseholdSummary,
   purchaseMemberSlots,
+  revokeWhitelistedMember,
   updateMemberNotifyFlags,
 } from "./household.service.js";
 import { parseIndonesianPhone } from "../whatsapp/whatsapp.utils.js";
@@ -150,7 +151,7 @@ export async function householdRoutes(app: FastifyInstance, env: Env) {
         });
       }
 
-      await householdRepository.revokeMember(memberId);
+      await revokeWhitelistedMember(userId, memberId);
       return { success: true };
     },
   );

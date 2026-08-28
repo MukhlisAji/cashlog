@@ -121,6 +121,7 @@ export function HouseholdMembersEditor({
 
     if (!result.success) {
       setError(result.error ?? "Gagal membeli slot.");
+      showToast("error", result.error ?? "Gagal membeli slot.");
       return;
     }
 
@@ -129,15 +130,16 @@ export function HouseholdMembersEditor({
       return;
     }
 
+    let okText: string;
     if (targetTotal === 0) {
-      setMessage("Slot anggota dinonaktifkan.");
+      okText = "Slot anggota dinonaktifkan.";
     } else if (targetTotal > slotsPaid) {
-      setMessage(
-        `${targetTotal - slotsPaid} slot ditambahkan — total ${targetTotal} slot aktif.`,
-      );
+      okText = `${targetTotal - slotsPaid} slot ditambahkan. Total ${targetTotal} slot aktif.`;
     } else {
-      setMessage(`Total slot disesuaikan menjadi ${targetTotal}.`);
+      okText = `Slot dikurangi. Total sekarang ${targetTotal} slot.`;
     }
+    setMessage(okText);
+    showToast("success", okText);
     setAddSlotsInput("1");
     await refresh();
   }
@@ -168,19 +170,15 @@ export function HouseholdMembersEditor({
 
     if (!result.success) {
       setError(result.error ?? "Gagal menambahkan anggota.");
-      showToast(
-        NOTICE_MESSAGES.save_failed.kind,
-        NOTICE_MESSAGES.save_failed.text,
-      );
+      showToast("error", result.error ?? "Gagal menambahkan anggota.");
       return;
     }
 
     setDisplayName("");
     setPhone("");
-    setMessage(
-      `${result.data?.displayName ?? "Anggota"} di-whitelist. Kami kirim pesan selamat datang via WhatsApp.`,
-    );
-    showToast(NOTICE_MESSAGES.saved.kind, NOTICE_MESSAGES.saved.text);
+    const okText = `${result.data?.displayName ?? "Anggota"} terdaftar. Kami kirim pesan selamat datang via WhatsApp.`;
+    setMessage(okText);
+    showToast("success", okText);
     await refresh();
   }
 
@@ -195,10 +193,13 @@ export function HouseholdMembersEditor({
 
     if (!result.success) {
       setError(result.error ?? "Gagal mencabut anggota.");
+      showToast("error", result.error ?? "Gagal mencabut anggota.");
       return;
     }
 
-    setMessage("Anggota dicabut dari whitelist.");
+    const okText = "Anggota dicabut dan 1 slot dinonaktifkan.";
+    setMessage(okText);
+    showToast("success", okText);
     await refresh();
   }
 
@@ -487,7 +488,7 @@ export function HouseholdMembersEditor({
       <ConfirmDialog
         open={!!confirmRevokeId}
         title="Cabut anggota?"
-        description={`${confirmRevokeName} tidak bisa lagi mencatat ke sheet keluarga.`}
+        description={`${confirmRevokeName} tidak bisa lagi mencatat ke sheet keluarga. 1 slot anggota juga akan dinonaktifkan.`}
         confirmLabel="Ya, cabut"
         loading={loading}
         onCancel={() => {

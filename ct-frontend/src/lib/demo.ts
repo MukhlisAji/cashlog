@@ -646,6 +646,12 @@ export function revokeDemoHouseholdMember(memberId: string) {
   saveDemoHouseholdMembers(
     getDemoHouseholdMembersRaw().filter((m) => m.id !== memberId),
   );
+  const remaining = getDemoHouseholdMembersRaw().filter(
+    (m) => m.status !== "revoked",
+  ).length;
+  const slots = Number(ls()?.getItem(DEMO_HOUSEHOLD_SLOTS_KEY) ?? 0);
+  const nextSlots = Math.max(remaining, Math.max(0, slots - 1));
+  ls()?.setItem(DEMO_HOUSEHOLD_SLOTS_KEY, String(nextSlots));
 }
 
 export function updateDemoMemberNotifyFlags(flags: {
