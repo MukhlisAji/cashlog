@@ -38,7 +38,7 @@ export const PROCESS_TRANSACTIONS_TOOL = {
         dynamic_greeting: {
           type: "string",
           description:
-            "A short, natural confirmation sentence (max 10 words). Example: 'Siap, udah masuk catatan!'",
+            "Short casual Indonesian confirmation, max 8 words. Vary the wording. Examples: 'Oke, udah kecatat.' 'Masuk ya.' 'Siap.' 'Kecatat.' 'Oke, masuk.' Never reuse the same phrase every time.",
         },
         transactions: {
           type: "array",
@@ -110,7 +110,7 @@ export const CASUAL_CHAT_TOOL = {
 function clipGreeting(raw: unknown, fallback: string): string {
   let greeting = typeof raw === "string" ? raw.trim() : fallback;
   const words = greeting.split(/\s+/).filter(Boolean);
-  if (words.length > 10) greeting = words.slice(0, 10).join(" ");
+  if (words.length > 8) greeting = words.slice(0, 8).join(" ");
   return greeting || fallback;
 }
 
@@ -192,7 +192,7 @@ function parseProcessArgs(raw: string): ProcessTransactionsToolArgs | null {
     }
     return {
       kind: "process_transactions",
-      dynamic_greeting: clipGreeting(data.dynamic_greeting, "Siap, udah masuk catatan!"),
+      dynamic_greeting: clipGreeting(data.dynamic_greeting, "Oke, masuk."),
       transactions,
       needs_amount,
     };
@@ -254,7 +254,7 @@ Contoh: "Makan siang 50k, terus dapet transferan bos 5jt"
 Contoh: "Makan 50k, dapet transferan bos 5jt" → expense 50000 + income 5000000.
 Scan seluruh pesan sampai semua nominal dan niat (keluar/masuk) tertangkap.
 
-dynamic_greeting: konfirmasi ramah, maksimal 10 kata, bahasa Indonesia santai.
+dynamic_greeting: konfirmasi pendek, bahasa Indonesia santai, maksimal 8 kata. Ganti-ganti: "Oke, udah kecatat." / "Masuk ya." / "Siap." / "Kecatat." / "Oke, masuk." Jangan selalu kalimat yang sama. Jangan terdengar seperti sistem.
 Jika pesan sapaan, terima kasih, atau topik non-keuangan, panggil casual_chat.
 reply_text: bahasa Indonesia santai, 1-2 kalimat, tanpa format sistem.
 ${casualHint}

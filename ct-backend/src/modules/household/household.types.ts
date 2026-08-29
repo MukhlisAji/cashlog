@@ -9,6 +9,8 @@ export interface HouseholdRow {
   notify_members_reminder: boolean;
   notify_members_weekly: boolean;
   notify_members_monthly: boolean;
+  habit_streak: number;
+  habit_last_date: string | null;
 }
 
 export interface HouseholdMemberRow {

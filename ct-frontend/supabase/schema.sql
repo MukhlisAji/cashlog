@@ -118,6 +118,19 @@ create table if not exists public.scheduler_job_runs (
   claimed_at timestamptz not null default now()
 );
 
+create table if not exists public.ops_events (
+  id          uuid primary key default gen_random_uuid(),
+  kind        text not null,
+  ok          boolean not null default true,
+  user_id     uuid,
+  message     text,
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists ops_events_created_at_idx
+  on public.ops_events (created_at desc);
+
+
 alter table public.processed_wa_messages enable row level security;
 alter table public.scheduler_job_runs enable row level security;
 
@@ -193,6 +206,8 @@ create table public.households (
   notify_members_reminder boolean not null default true,
   notify_members_weekly   boolean not null default false,
   notify_members_monthly  boolean not null default false,
+  habit_streak           integer not null default 0,
+  habit_last_date        date,
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );

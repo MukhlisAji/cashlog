@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "../../lib/supabase.js";
+import { previousJakartaDate } from "../../lib/datetime-jakarta.js";
 import { normalizePhone } from "./whatsapp.utils.js";
 
 const MAX_TEMPLATE_STREAK = 3;
@@ -82,11 +83,4 @@ export async function resetReminderTemplateStreak(phone: string): Promise<void> 
     },
     { onConflict: "phone" },
   );
-}
-
-function previousJakartaDate(yyyyMmDd: string): string {
-  const [year, month, day] = yyyyMmDd.split("-").map(Number);
-  const utc = Date.UTC(year, month - 1, day) - 24 * 60 * 60 * 1000;
-  const d = new Date(utc);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }

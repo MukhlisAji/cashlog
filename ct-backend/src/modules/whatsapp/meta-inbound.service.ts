@@ -1,4 +1,5 @@
 import type { Env } from "../../config/env.js";
+import { errorMessage, recordOpsEvent } from "../../lib/ops-events.js";
 import type { MetaIncomingMessageEnvelope } from "./meta-cloud.service.js";
 import { getMetaService } from "./meta-outbound.service.js";
 import { claimInboundWaMessage } from "./wa-message-dedup.js";
@@ -25,5 +26,10 @@ export async function handleMetaIncomingMessage(
     await routeIncomingWhatsAppMessage(env, getMetaService(), msg);
   } catch (error) {
     console.error("[wa-inbound] router failed", error);
+    void recordOpsEvent({
+      kind: "inbound",
+      ok: false,
+      message: errorMessage(error),
+    });
   }
 }

@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   LogOut,
   Settings,
+  Shield,
 } from "lucide-react";
 import Image from "next/image";
 
@@ -24,6 +25,7 @@ import {
 } from "@/components/ui/sheet";
 import { siteConfig } from "@/config/site";
 import { useAuth } from "@/hooks/use-auth";
+import { useIsAdmin } from "@/hooks/use-is-admin";
 import { NAV_LINKS, ROUTES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
@@ -121,6 +123,7 @@ function MobileGuestFooter() {
 
 function MobileUserFooter({ showDashboardLink }: { showDashboardLink?: boolean }) {
   const { user, signOut } = useAuth();
+  const isAdmin = useIsAdmin();
 
   if (!user) return null;
 
@@ -149,6 +152,11 @@ function MobileUserFooter({ showDashboardLink }: { showDashboardLink?: boolean }
         <MobileNavLink href={ROUTES.settings} icon={Settings}>
           Pengaturan
         </MobileNavLink>
+        {isAdmin ? (
+          <MobileNavLink href={ROUTES.admin} icon={Shield}>
+            Admin
+          </MobileNavLink>
+        ) : null}
       </nav>
       <SheetClose
         render={

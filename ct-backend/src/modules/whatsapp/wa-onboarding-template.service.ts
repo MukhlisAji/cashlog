@@ -1,5 +1,6 @@
 import type { Env } from "../../config/env.js";
 import { isMetaWhatsAppConfigured } from "../../config/env.js";
+import { errorMessage, recordOpsEvent } from "../../lib/ops-events.js";
 import { getUserProfile } from "../../lib/subscription.js";
 import { getSupabaseAdmin } from "../../lib/supabase.js";
 import { householdRepository } from "../household/household.repository.js";
@@ -65,6 +66,11 @@ export async function sendOnboardingTemplate(
       { phone: to, error },
       "[wa-onboarding-template] failed to send onboarding_notif_v1",
     );
+    void recordOpsEvent({
+      kind: "onboard.lead",
+      ok: false,
+      message: errorMessage(error),
+    });
     return false;
   }
 }
@@ -115,7 +121,15 @@ export async function sendOnboardingTemplateToLeadIfReady(
     profile?.full_name,
     sheet.spreadsheetId,
   );
-  if (!sent) await releaseLeadOnboarding(userId);
+  if (!sent) {
+    await releaseLeadOnboarding(userId);
+    return;
+  }
+  void recordOpsEvent({
+    kind: "onboard.lead",
+    ok: true,
+    userId,
+  });
 }
 
 export async function sendOnboardingTemplateToMemberIfReady(
@@ -124,5 +138,15 @@ export async function sendOnboardingTemplateToMemberIfReady(
   phone: string,
 ): Promise<void> {
   const profile = await getUserProfile(leadUserId);
-  await sendMemberOnboardingTemplate(env, phone, firstName(profile?.full_name));
+  const sent = await sendMemberOnboardingTemplate(
+    env,
+    phone,
+    firstName(profile?.full_name),
+  );
+  void recordOpsEvent({
+    kind: "onboard.member",
+    ok: sent,
+    userId: leadUserId,
+    message: sent ? null : "send_failed",
+  });
 }

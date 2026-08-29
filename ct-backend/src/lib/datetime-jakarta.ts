@@ -174,6 +174,14 @@ export function formatRecordedAtLabel(date: string, time: string): string {
   return `${datePart} · ${timeShort} WIB`;
 }
 
+/** Previous calendar day for a YYYY-MM-DD date string. */
+export function previousJakartaDate(yyyyMmDd: string): string {
+  const [year, month, day] = yyyyMmDd.split("-").map(Number);
+  const utc = Date.UTC(year, month - 1, day) - 24 * 60 * 60 * 1000;
+  const d = new Date(utc);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
 export function formatTransactionLineMeta(
   date: string,
   time?: string | null,
@@ -191,3 +199,4 @@ export function formatTransactionLineMeta(
 
   return datePart;
 }
+

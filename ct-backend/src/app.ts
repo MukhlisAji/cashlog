@@ -20,6 +20,7 @@ import { initMetaOutbound } from "./modules/whatsapp/meta-outbound.service.js";
 import { householdRoutes } from "./modules/household/household.routes.js";
 import { whatsappRoutes } from "./modules/whatsapp/whatsapp.routes.js";
 import { metaWebhookRoutes } from "./modules/whatsapp/meta-webhook.routes.js";
+import { adminRoutes } from "./modules/admin/admin.routes.js";
 
 export async function buildApp(env: Env) {
   assertProductionSecurity(env);
@@ -100,6 +101,9 @@ export async function buildApp(env: Env) {
     },
   );
   await app.register(async (instance) => authRoutes(instance, env), {
+    prefix: "/api",
+  });
+  await app.register(async (instance) => adminRoutes(instance, env), {
     prefix: "/api",
   });
   await app.register(async (instance) => householdRoutes(instance, env), {

@@ -11,6 +11,7 @@ export const ROUTES = {
   paymentReturn: "/payment/return",
   privacy: "/privacy",
   terms: "/terms",
+  admin: "/admin",
 } as const;
 
 export const NAV_LINKS = {

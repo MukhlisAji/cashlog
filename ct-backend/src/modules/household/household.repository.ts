@@ -25,6 +25,10 @@ function mapHousehold(row: Record<string, unknown>): HouseholdRow {
     notify_members_reminder: row.notify_members_reminder !== false,
     notify_members_weekly: row.notify_members_weekly === true,
     notify_members_monthly: row.notify_members_monthly === true,
+    habit_streak: Number(row.habit_streak ?? 0),
+    habit_last_date: row.habit_last_date
+      ? String(row.habit_last_date).slice(0, 10)
+      : null,
   };
 }
 
@@ -279,6 +283,22 @@ export const householdRepository = {
       .from("households")
       .update({
         member_slots_paid: slots,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", householdId);
+    if (error) throw error;
+  },
+
+  async setHabitStreak(
+    householdId: string,
+    streak: number,
+    lastDate: string,
+  ): Promise<void> {
+    const { error } = await sb()
+      .from("households")
+      .update({
+        habit_streak: streak,
+        habit_last_date: lastDate,
         updated_at: new Date().toISOString(),
       })
       .eq("id", householdId);

@@ -1,5 +1,6 @@
 import type { Env } from "../../config/env.js";
 import { getTodayJakarta } from "../../lib/datetime-jakarta.js";
+import { errorMessage, recordOpsEvent } from "../../lib/ops-events.js";
 import {
   claimSchedulerJob,
   releaseSchedulerJob,
@@ -12,7 +13,7 @@ import {
 import { householdRepository } from "../household/household.repository.js";
 import { getMetaService } from "./meta-outbound.service.js";
 import { isMetaSessionWindowClosed } from "./meta-cloud.service.js";
-import { buildEveningReminderMessage } from "./wa-command.service.js";
+import { buildEveningReminderMessage, getVisibleHabitStreak } from "./wa-habit-streak.js";
 import { DAILY_REMINDER_TEMPLATE_NAME } from "./wa-daily-reminder.js";
 import {
   bumpReminderTemplateStreak,
@@ -79,7 +80,13 @@ async function sendEveningReminderToUser(
     return;
   }
 
-  const text = buildEveningReminderMessage(todayCount, todayTotal);
+  const habitStreak = await getVisibleHabitStreak(userId);
+  const text = buildEveningReminderMessage(
+    todayCount,
+    todayTotal,
+    habitStreak,
+    `${userId}:${date}`,
+  );
   const household = await householdRepository.getByLeadUserId(userId);
   const includeMembers = household?.notify_members_reminder !== false;
   const lead = await householdRepository.getLeadPhone(userId);
@@ -116,6 +123,11 @@ async function sendReminderToPhone(
   } catch (error) {
     if (!isMetaSessionWindowClosed(error)) {
       console.error({ phone, error }, "[wa-reminder] session send failed");
+      void recordOpsEvent({
+        kind: "reminder",
+        ok: false,
+        message: errorMessage(error),
+      });
       return false;
     }
   }
@@ -136,6 +148,11 @@ async function sendReminderToPhone(
       { phone, error, template: DAILY_REMINDER_TEMPLATE_NAME },
       "[wa-reminder] daily_reminder_v1 failed",
     );
+    void recordOpsEvent({
+      kind: "reminder",
+      ok: false,
+      message: errorMessage(error),
+    });
     return false;
   }
 }
@@ -147,6 +164,12 @@ async function runEveningReminders(env: Env): Promise<void> {
       await sendEveningReminderToUser(env, userId);
     } catch (error) {
       console.error({ userId, error }, "[wa-reminder] failed for user");
+      void recordOpsEvent({
+        kind: "reminder",
+        ok: false,
+        userId,
+        message: errorMessage(error),
+      });
     }
   }
 }

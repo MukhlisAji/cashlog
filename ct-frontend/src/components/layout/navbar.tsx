@@ -7,6 +7,7 @@ import {
   LogOut,
   Menu,
   Settings,
+  Shield,
 } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -27,6 +28,7 @@ import { MarketingNavLinks } from "@/components/landing/marketing-nav-links";
 import { MobileNavSheet } from "@/components/layout/mobile-nav-sheet";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { useAuth } from "@/hooks/use-auth";
+import { useIsAdmin } from "@/hooks/use-is-admin";
 import { NAV_LINKS, ROUTES } from "@/lib/constants";
 import { isMarketingLandingPage } from "@/lib/marketing-scroll";
 import { cn } from "@/lib/utils";
@@ -85,6 +87,7 @@ function GuestActions({ className }: { className?: string }) {
 
 function UserMenu() {
   const { user, signOut } = useAuth();
+  const isAdmin = useIsAdmin();
 
   if (!user) return null;
 
@@ -128,6 +131,16 @@ function UserMenu() {
             <Settings />
             Pengaturan
           </DropdownMenuItem>
+          {isAdmin ? (
+            <DropdownMenuItem
+              onClick={() => {
+                window.location.href = ROUTES.admin;
+              }}
+            >
+              <Shield />
+              Admin
+            </DropdownMenuItem>
+          ) : null}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
@@ -173,7 +186,8 @@ export function Navbar() {
   const isDashboard =
     pathname.startsWith("/ringkasan") ||
     pathname.startsWith("/dashboard") ||
-    pathname.startsWith("/settings");
+    pathname.startsWith("/settings") ||
+    pathname.startsWith("/admin");
   const isMarketingPage = isMarketingLandingPage(pathname);
   const navLinks = isDashboard ? NAV_LINKS.dashboard : NAV_LINKS.marketing;
   const logoHref =

@@ -11,6 +11,10 @@ function isProtectedPath(pathname: string): boolean {
   );
 }
 
+function isAdminPath(pathname: string): boolean {
+  return pathname === "/admin" || pathname.startsWith("/admin/");
+}
+
 function isPaymentReturnPath(pathname: string): boolean {
   return pathname === "/payment/return";
 }
@@ -25,7 +29,7 @@ export async function updateSession(request: NextRequest) {
   if (isDemoMode()) {
     const demoSession =
       request.cookies.get(DEMO_SESSION_COOKIE)?.value === "1";
-    const isProtected = isProtectedPath(pathname);
+    const isProtected = isProtectedPath(pathname) || isAdminPath(pathname);
     const isAuth = isAuthPath(pathname);
 
     if (isProtected && !demoSession) {
@@ -72,6 +76,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const isProtected = isProtectedPath(pathname);
+  const isAdmin = isAdminPath(pathname);
   const isAuth = isAuthPath(pathname);
   const isSubscriptionExpiredPage = pathname === "/subscription-expired";
   const isPaymentReturn = isPaymentReturnPath(pathname);
@@ -89,7 +94,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (isProtected && !user) {
+  if ((isProtected || isAdmin) && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirect", pathname);
@@ -104,7 +109,7 @@ export async function updateSession(request: NextRequest) {
     const sub = await checkSubscriptionFromProfile(supabase, user.id);
     const neverSubscribed = !sub.allowed && !sub.expiresAt;
 
-    if (!sub.allowed && isProtected) {
+    if (!sub.allowed && isProtected && !isAdmin) {
       const url = request.nextUrl.clone();
       url.pathname = neverSubscribed ? "/" : "/subscription-expired";
       if (neverSubscribed) {

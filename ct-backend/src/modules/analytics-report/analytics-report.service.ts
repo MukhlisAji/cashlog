@@ -9,7 +9,7 @@ import {
 } from "../config/config.repository.js";
 import { fetchAnalyticsData } from "../sheets/sheet-data.service.js";
 import { householdRepository } from "../household/household.repository.js";
-import { sendDocumentToHousehold } from "../whatsapp/meta-outbound.service.js";
+import { recordOpsEvent, errorMessage } from "../../lib/ops-events.js";
 import { formatMonthLabel } from "../whatsapp/wa-sheet-queries.js";
 import { computeAnalyticsInsights } from "./analytics-insights.js";
 import { buildCategoryColorMap } from "./analytics-colors.js";
@@ -163,10 +163,31 @@ export async function sendAnalyticsReportToUser(
     pdf = await generateAnalyticsReportPdf(env, userId, target);
   } catch (error) {
     console.error({ userId, error, target }, "[analytics-report] PDF generation failed");
+    void recordOpsEvent({
+      kind: "pdf.generate",
+      ok: false,
+      userId,
+      message: errorMessage(error),
+    });
     return false;
   }
 
-  if (!pdf) return false;
+  if (!pdf) {
+    void recordOpsEvent({
+      kind: "pdf.generate",
+      ok: false,
+      userId,
+      message: "empty (no sheet or no transactions)",
+    });
+    return false;
+  }
+
+  void recordOpsEvent({
+    kind: "pdf.generate",
+    ok: true,
+    userId,
+    message: target.kind,
+  });
 
   const household = await householdRepository.getByLeadUserId(userId);
   const includeMembers = isMonthly
@@ -189,6 +210,19 @@ export async function sendAnalyticsReportToUser(
     } else {
       await userConfigRepository.setLastAnalyticsReportKey(userId, target.reportKey);
     }
+    void recordOpsEvent({
+      kind: "pdf.send",
+      ok: true,
+      userId,
+      message: target.kind,
+    });
+  } else {
+    void recordOpsEvent({
+      kind: "pdf.send",
+      ok: false,
+      userId,
+      message: target.kind,
+    });
   }
   return sent;
 }

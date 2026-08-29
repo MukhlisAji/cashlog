@@ -13,6 +13,7 @@ import { getSheetStatus } from "../sheets/sheets-setup.service.js";
 import { householdRepository } from "../household/household.repository.js";
 import { ensureLeadHousehold } from "../household/household.service.js";
 import { checkSubscription } from "../../lib/subscription.js";
+import { recordOpsEvent } from "../../lib/ops-events.js";
 import {
   generateAnalyticsReportPdf,
   type ReportTarget,
@@ -163,11 +164,24 @@ export async function dashboardRoutes(app: FastifyInstance, env: Env) {
       try {
         const pdf = await generateAnalyticsReportPdf(env, userId, target);
         if (!pdf) {
+          void recordOpsEvent({
+            kind: "pdf.export",
+            ok: false,
+            userId,
+            message: "empty",
+          });
           return reply.status(404).send({
             success: false,
             error: "Belum ada transaksi untuk bulan ini",
           });
         }
+
+        void recordOpsEvent({
+          kind: "pdf.export",
+          ok: true,
+          userId,
+          message: targetMonth,
+        });
 
         const filename = `cashlog-analitik-${targetMonth.replace("-", "")}-bulanan.pdf`;
         return reply
@@ -176,6 +190,12 @@ export async function dashboardRoutes(app: FastifyInstance, env: Env) {
           .send(pdf);
       } catch (error) {
         request.log.error(error);
+        void recordOpsEvent({
+          kind: "pdf.export",
+          ok: false,
+          userId,
+          message: error instanceof Error ? error.message : String(error),
+        });
         return reply.status(500).send({
           success: false,
           error: "Gagal membuat PDF",

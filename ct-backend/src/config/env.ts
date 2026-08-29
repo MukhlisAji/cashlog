@@ -56,6 +56,8 @@ const envSchema = z.object({
   TEST_USER_EMAIL: z.string().default("test@cashlog.id"),
   TEST_USER_PASSWORD: z.string().default("test123456"),
   TEST_USER_NAME: z.string().default("Test User"),
+  /** Comma-separated emails that can open /admin. Empty = nobody. */
+  ADMIN_EMAILS: z.string().optional().default(""),
   // Email (Resend) — https://resend.com
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
@@ -87,6 +89,18 @@ export function isSupabaseConfigured(env: Env): boolean {
 
 export function isGoogleConfigured(env: Env): boolean {
   return !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+}
+
+export function parseAdminEmails(env: Env): string[] {
+  return (env.ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+export function isAdminEmail(env: Env, email: string | undefined | null): boolean {
+  if (!email) return false;
+  return parseAdminEmails(env).includes(email.trim().toLowerCase());
 }
 
 export function isMetaWhatsAppConfigured(env: Env): boolean {

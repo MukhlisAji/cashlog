@@ -1,5 +1,6 @@
 import type { Env } from "../../config/env.js";
 import { formatRecordedAtLabel, getNowJakarta } from "../../lib/datetime-jakarta.js";
+import { errorMessage, recordOpsEvent } from "../../lib/ops-events.js";
 import {
   callLayer3Tools,
   callProcessTransactionsFromVision,
@@ -29,6 +30,7 @@ import {
   parseWhatsAppLinkCode,
 } from "./wa-link-code.service.js";
 import { tryHandleWaCommand } from "./wa-command.service.js";
+import { pickSuccessGreeting, recordHabitDay, streakLine } from "./wa-habit-streak.js";
 import { claimUnregisteredNotice } from "./wa-message-dedup.js";
 import { resetReminderTemplateStreak } from "./wa-reminder-streak.js";
 
@@ -178,14 +180,17 @@ function formatBulkReply(
     transaction_date: string;
   }>,
   time: string,
+  habitStreak?: number,
 ): string {
   const lines = items.map((item) => {
     const sign = item.type === "income" ? "+" : "-";
     return `${sign} *${item.description}*  Rp ${formatRupiah(item.amount)}  (${item.category})`;
   });
   const firstDate = items[0]?.transaction_date;
+  const streak = habitStreak ? streakLine(habitStreak) : null;
   return [
     greeting,
+    streak ?? "",
     items.length ? "" : "",
     ...lines,
     firstDate && items.length ? `📅 ${formatRecordedAtLabel(firstDate, time)}` : "",
@@ -368,7 +373,13 @@ async function runAiBrain(
       categories,
       { allowCasual, oocCount },
     );
-  } catch {
+  } catch (error) {
+    void recordOpsEvent({
+      kind: "parse",
+      ok: false,
+      userId: ctx.leadUserId,
+      message: errorMessage(error),
+    });
     await meta.sendWhatsAppMessage(
       waId,
       '❓ Belum bisa membaca transaksi itu. Coba: "Makan siang 50rb"',
@@ -377,6 +388,14 @@ async function runAiBrain(
   }
 
   if (!parsed) {
+    if (looksFinancial) {
+      void recordOpsEvent({
+        kind: "parse",
+        ok: false,
+        userId: ctx.leadUserId,
+        message: allowCasual ? "unrecognized" : "ooc_locked",
+      });
+    }
     if (!allowCasual) {
       await meta.sendWhatsAppMessage(waId, OOC_LOCKED_REPLY);
       return;
@@ -457,7 +476,13 @@ async function runReceiptVision(
       media.mimetype,
       msg.body ?? undefined,
     );
-  } catch {
+  } catch (error) {
+    void recordOpsEvent({
+      kind: "parse.receipt",
+      ok: false,
+      userId: ctx.leadUserId,
+      message: errorMessage(error),
+    });
     await meta.sendWhatsAppMessage(
       msg.waId,
       "❓ Struk belum terbaca. Pastikan fotonya jelas, atau ketik transaksinya.",
@@ -466,6 +491,12 @@ async function runReceiptVision(
   }
 
   if (!parsed) {
+    void recordOpsEvent({
+      kind: "parse.receipt",
+      ok: false,
+      userId: ctx.leadUserId,
+      message: "no_items",
+    });
     await meta.sendWhatsAppMessage(
       msg.waId,
       "❓ Tidak ada item yang bisa diekstrak dari struk. Coba foto lebih dekat.",
@@ -490,14 +521,19 @@ async function persistProcessedTransactions(
   categoryNames: string[],
   parsed: ProcessTransactionsToolArgs,
 ): Promise<string> {
-  const { time } = getNowJakarta();
+  const { date, time } = getNowJakarta();
   const normalized: ParsedLayer3Transaction[] = parsed.transactions.map((item) => ({
     ...item,
     category: resolveCategory(item.category, categoryNames, item.type),
   }));
 
+  const greeting = pickSuccessGreeting(
+    parsed.dynamic_greeting,
+    `${ctx.leadUserId}:${normalized.map((item) => item.description + item.amount).join("|")}:${date}`,
+  );
+
   if (normalized.length === 0) {
-    return formatBulkReply(parsed.dynamic_greeting || "Siap", [], time);
+    return formatBulkReply(greeting, [], time);
   }
 
   const sheetRows: TransactionRow[] = normalized.map((item) => ({
@@ -519,10 +555,38 @@ async function persistProcessedTransactions(
     // Table may not exist until SQL is applied; Sheet remains a backup write.
   }
 
-  await appendTransactions(env, ctx.leadUserId, spreadsheetId, sheetRows);
+  try {
+    await appendTransactions(env, ctx.leadUserId, spreadsheetId, sheetRows);
+  } catch (error) {
+    void recordOpsEvent({
+      kind: "record",
+      ok: false,
+      userId: ctx.leadUserId,
+      message: errorMessage(error),
+    });
+    throw error;
+  }
+  void recordOpsEvent({
+    kind: "record",
+    ok: true,
+    userId: ctx.leadUserId,
+    message: String(normalized.length),
+  });
   await setOocCount(ctx.leadUserId, 0);
   if (ctx.phoneNumber) {
     await resetReminderTemplateStreak(ctx.phoneNumber);
   }
-  return formatBulkReply(parsed.dynamic_greeting, normalized, time);
+
+  let shownStreak: number | undefined;
+  const countsToday = normalized.some((item) => item.transaction_date === date);
+  if (countsToday) {
+    try {
+      const habit = await recordHabitDay(ctx.leadUserId);
+      if (habit.firstOfDay) shownStreak = habit.streak;
+    } catch (error) {
+      console.error({ error }, "[wa-habit] streak update failed");
+    }
+  }
+
+  return formatBulkReply(greeting, normalized, time, shownStreak);
 }

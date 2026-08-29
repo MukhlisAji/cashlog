@@ -5,7 +5,6 @@ import { googleConnectionRepository } from "../config/config.repository.js";
 import {
   formatLastFiveReport,
   formatMonthReport,
-  formatRupiah,
   formatTodayReport,
   type LedgerTransaction,
 } from "./wa-report.service.js";
@@ -124,25 +123,3 @@ export async function tryHandleWaCommand(
   return formatMonthReport(rows, formatMonthLabel(month));
 }
 
-export function buildEveningReminderMessage(
-  todayCount: number,
-  todayTotal: number,
-): string {
-  if (todayCount > 0) {
-    return [
-      "*Reminder cashlog.id*",
-      "",
-      `Hari ini kamu sudah catat ${todayCount} transaksi — total Rp ${formatRupiah(todayTotal)}.`,
-      "Good job! Besok lanjut ya 💪",
-      "Ketik *menu* untuk melihat daftar perintah.",
-    ].join("\n");
-  }
-
-  return [
-    "*Reminder cashlog.id*",
-    "",
-    "Hari ini belum ada catatan pengeluaran.",
-    'Kirim aja singkat: "Beli kopi 20rb"',
-    "Ketik *menu* untuk melihat daftar perintah.",
-  ].join("\n");
-}

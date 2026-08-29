@@ -6,6 +6,7 @@ import { userConfigRepository } from "../config/config.repository.js";
 import { householdRepository } from "../household/household.repository.js";
 import { formatMonthLabel } from "../whatsapp/wa-sheet-queries.js";
 import { sendDocumentToLeadUser } from "../whatsapp/meta-outbound.service.js";
+import { errorMessage, recordOpsEvent } from "../../lib/ops-events.js";
 import {
   generateAnalyticsReportPdf,
   type ReportTarget,
@@ -58,10 +59,31 @@ export async function sendTrialEndReportToUser(
     pdf = await generateAnalyticsReportPdf(env, userId, target);
   } catch (error) {
     console.error({ userId, error }, "[trial-report] PDF generation failed");
+    void recordOpsEvent({
+      kind: "pdf.generate",
+      ok: false,
+      userId,
+      message: `trial:${errorMessage(error)}`,
+    });
     return false;
   }
 
-  if (!pdf) return false;
+  if (!pdf) {
+    void recordOpsEvent({
+      kind: "pdf.generate",
+      ok: false,
+      userId,
+      message: "trial:empty",
+    });
+    return false;
+  }
+
+  void recordOpsEvent({
+    kind: "pdf.generate",
+    ok: true,
+    userId,
+    message: "trial",
+  });
 
   const caption = buildTrialEndCaption(env, month);
   const filename = buildTrialEndFilename(month);
@@ -69,6 +91,19 @@ export async function sendTrialEndReportToUser(
   const sent = await sendDocumentToLeadUser(userId, pdf, filename, caption);
   if (sent) {
     await userConfigRepository.setLastTrialEndReportKey(userId, TRIAL_END_REPORT_KEY);
+    void recordOpsEvent({
+      kind: "pdf.send",
+      ok: true,
+      userId,
+      message: "trial",
+    });
+  } else {
+    void recordOpsEvent({
+      kind: "pdf.send",
+      ok: false,
+      userId,
+      message: "trial",
+    });
   }
   return sent;
 }

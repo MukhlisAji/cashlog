@@ -18,6 +18,7 @@ import {
   isGoogleInsufficientScopeError,
 } from "./google-scope.js";
 import { sendOnboardingTemplateToLeadIfReady } from "../whatsapp/wa-onboarding-template.service.js";
+import { errorMessage, recordOpsEvent } from "../../lib/ops-events.js";
 
 export async function sheetsRoutes(app: FastifyInstance, env: Env) {
   app.get(
@@ -87,6 +88,12 @@ export async function sheetsRoutes(app: FastifyInstance, env: Env) {
       return reply.redirect(successRedirect.replace("sheet=authorized", "sheet=connected"));
     } catch (error) {
       request.log.error(error);
+      void recordOpsEvent({
+        kind: "sheet.setup",
+        ok: false,
+        userId,
+        message: errorMessage(error),
+      });
       if (
         error instanceof GoogleScopeMissingError ||
         isGoogleInsufficientScopeError(error)
@@ -158,6 +165,12 @@ export async function sheetsRoutes(app: FastifyInstance, env: Env) {
         return { success: true, data: result };
       } catch (error) {
         request.log.error(error);
+        void recordOpsEvent({
+          kind: "sheet.setup",
+          ok: false,
+          userId,
+          message: errorMessage(error),
+        });
         if (
           error instanceof GoogleScopeMissingError ||
           isGoogleInsufficientScopeError(error)
