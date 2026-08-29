@@ -1,5 +1,5 @@
 import type { Env } from "../../config/env.js";
-import { normalizeSheetCellDateTime } from "../../lib/datetime-jakarta.js";
+import { getNowJakarta, normalizeSheetCellDateTime } from "../../lib/datetime-jakarta.js";
 import {
   budgetsRepository,
   categoriesRepository,
@@ -352,4 +352,87 @@ export async function fetchAnalyticsData(
       topCategory,
     },
   };
+}
+
+export type DeletableSheetRow = {
+  year: string;
+  sheetRow: number;
+  date: string;
+  item: string;
+  amount: number;
+  category: string;
+  type: "expense" | "income";
+};
+
+/** Newest first. `sheetRow` is 1-based (header is row 1). */
+export async function listRecentDeletableRows(
+  env: Env,
+  userId: string,
+  spreadsheetId: string,
+  limit = 5,
+): Promise<DeletableSheetRow[]> {
+  const sheets = await getSheetsClient(env, userId);
+  const year = getNowJakarta().date.slice(0, 4);
+  await ensureYearTab(sheets, spreadsheetId, year);
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${year}!A2:H2000`,
+    valueRenderOption: "UNFORMATTED_VALUE",
+  });
+
+  const values = res.data.values ?? [];
+  const found: DeletableSheetRow[] = [];
+  for (let i = 0; i < values.length; i++) {
+    const raw = values[i] ?? [];
+    if (!raw[0] || !raw[1]) continue;
+    const { date } = normalizeSheetCellDateTime(raw[0], raw[6]);
+    const note = String(raw[5] ?? "").trim().toLowerCase();
+    found.push({
+      year,
+      sheetRow: i + 2,
+      date,
+      item: String(raw[1] ?? ""),
+      amount: parseAmount(raw[2]),
+      category: String(raw[3] ?? "Lainnya"),
+      type: note === "income" ? "income" : "expense",
+    });
+  }
+  return found.slice(-limit).reverse();
+}
+
+export async function deleteSheetRow(
+  env: Env,
+  userId: string,
+  spreadsheetId: string,
+  year: string,
+  sheetRow: number,
+): Promise<void> {
+  if (sheetRow < 2) throw new Error("Invalid sheet row");
+  const sheets = await getSheetsClient(env, userId);
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId,
+    fields: "sheets.properties",
+  });
+  const sheetId = meta.data.sheets?.find((s) => s.properties?.title === year)
+    ?.properties?.sheetId;
+  if (sheetId == null) throw new Error("Year tab not found");
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          deleteDimension: {
+            range: {
+              sheetId,
+              dimension: "ROWS",
+              startIndex: sheetRow - 1,
+              endIndex: sheetRow,
+            },
+          },
+        },
+      ],
+    },
+  });
 }

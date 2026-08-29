@@ -69,6 +69,7 @@ function helpText(sub: SubscriptionCheck): string {
     "• *hari ini* — total catatan hari ini",
     "• *ringkasan* — total bulan ini",
     "• *terakhir* — 5 transaksi terbaru",
+    "• *hapus terakhir* / *hapus 1*…*hapus 5* — hapus dari daftar itu",
   ];
 
   if (sub.canUseReceiptOcr) {

@@ -115,7 +115,12 @@ export function formatLastFiveReport(rows: LedgerTransaction[]): string {
     const date = row.transaction_date;
     return `${i + 1}. ${date} · ${row.description} · Rp ${formatRupiah(row.amount)} · ${row.category}`;
   });
-  return ["🧾 *5 transaksi terakhir*", ...lines].join("\n");
+  return [
+    "🧾 *5 transaksi terakhir*",
+    ...lines,
+    "",
+    "Hapus: *hapus terakhir* atau *hapus 1* … *hapus 5*.",
+  ].join("\n");
 }
 
 export function formatTodayReport(

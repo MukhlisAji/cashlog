@@ -30,6 +30,14 @@ import {
   parseWhatsAppLinkCode,
 } from "./wa-link-code.service.js";
 import { tryHandleWaCommand } from "./wa-command.service.js";
+import {
+  beginHapusPreview,
+  clearPendingHapus,
+  confirmPendingHapus,
+  hasPendingHapus,
+  parseHapusCommand,
+  parseHapusConfirm,
+} from "./wa-tx-delete.js";
 import { pickSuccessGreeting, recordHabitDay, streakLine } from "./wa-habit-streak.js";
 import { claimUnregisteredNotice } from "./wa-message-dedup.js";
 import { resetReminderTemplateStreak } from "./wa-reminder-streak.js";
@@ -206,6 +214,7 @@ async function sendMenu(meta: MetaService, waId: string): Promise<void> {
       { id: "cmd_hari_ini", title: "Hari ini", description: "Total catatan hari ini" },
       { id: "cmd_ringkasan", title: "Ringkasan", description: "Total bulan ini" },
       { id: "cmd_terakhir", title: "Terakhir", description: "5 transaksi terbaru" },
+      { id: "cmd_hapus", title: "Hapus terakhir", description: "Hapus transaksi terbaru" },
     ]);
   } catch {
     await meta.sendWhatsAppMessage(
@@ -216,8 +225,24 @@ async function sendMenu(meta: MetaService, waId: string): Promise<void> {
         "• *hari ini* — total hari ini",
         "• *ringkasan* — total bulan ini",
         "• *terakhir* — 5 transaksi terbaru",
+        "• *hapus terakhir* / *hapus 1-5*",
       ].join("\n"),
     );
+  }
+}
+
+async function sendHapusConfirmButtons(
+  meta: MetaService,
+  waId: string,
+  body: string,
+): Promise<void> {
+  try {
+    await meta.sendInteractiveButtons(waId, body, [
+      { id: "cmd_hapus_ya", title: "Ya, hapus" },
+      { id: "cmd_hapus_batal", title: "Batal" },
+    ]);
+  } catch {
+    await meta.sendWhatsAppMessage(waId, body);
   }
 }
 
@@ -310,6 +335,29 @@ async function routeIncomingWhatsAppMessageInner(
 
   const interactiveId = extractInteractiveCommandId(msg.raw);
   const text = msg.body?.trim() ?? "";
+
+  const hapusDecision = parseHapusConfirm(text, interactiveId);
+  if (hapusDecision && hasPendingHapus(ctx.leadUserId)) {
+    const reply = await confirmPendingHapus(env, ctx.leadUserId, hapusDecision);
+    await sendCommandWithButtons(meta, msg.waId, reply);
+    return;
+  }
+
+  const hapusCmd = parseHapusCommand(text, interactiveId);
+  if (hapusCmd) {
+    const preview = await beginHapusPreview(env, ctx.leadUserId, hapusCmd.index);
+    if (preview.confirm) {
+      await sendHapusConfirmButtons(meta, msg.waId, preview.text);
+    } else {
+      await sendCommandWithButtons(meta, msg.waId, preview.text);
+    }
+    return;
+  }
+
+  if (hasPendingHapus(ctx.leadUserId) && (text || interactiveId)) {
+    clearPendingHapus(ctx.leadUserId);
+  }
+
   const fastCommand = commandFromFastPath(text, interactiveId);
 
   if (fastCommand) {
