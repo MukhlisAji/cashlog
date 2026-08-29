@@ -9,6 +9,7 @@ import {
 } from "../config/config.repository.js";
 import { fetchAnalyticsData } from "../sheets/sheet-data.service.js";
 import { householdRepository } from "../household/household.repository.js";
+import { sendDocumentToHousehold } from "../whatsapp/meta-outbound.service.js";
 import { recordOpsEvent, errorMessage } from "../../lib/ops-events.js";
 import { formatMonthLabel } from "../whatsapp/wa-sheet-queries.js";
 import { computeAnalyticsInsights } from "./analytics-insights.js";
