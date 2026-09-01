@@ -307,8 +307,7 @@ export default function SettingsPage() {
               <CardHeader className="border-b bg-muted/20">
                 <CardTitle className="text-lg font-bold">Kategori</CardTitle>
                 <CardDescription>
-                  Edit keyword parser WhatsApp. Tambah/hapus kategori custom —
-                  Pro.
+                Tambah atau silang kategori.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -322,8 +321,7 @@ export default function SettingsPage() {
               <CardHeader className="border-b bg-muted/20">
                 <CardTitle className="text-lg font-bold">Budget Bulanan</CardTitle>
                 <CardDescription>
-                  Atur alokasi anggaran per kategori — tampil di analitik Budget
-                  vs Aktual
+                  Atur alokasi anggaran per kategori.
                 </CardDescription>
               </CardHeader>
               <CardContent>
