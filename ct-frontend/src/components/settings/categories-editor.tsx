@@ -153,7 +153,7 @@ export function CategoriesEditor({ onChange }: CategoriesEditorProps) {
     <div className="flex flex-col gap-4">
       <p className="text-xs text-muted-foreground">
         {canManageCategories
-          ? "Tambah atau silang kategori. Perubahan diterapkan setelah kamu simpan."
+          ? "Tambah atau hapus kategori. Perubahan diterapkan setelah kamu simpan."
           : "Langganan tidak aktif. Aktifkan langganan untuk mengelola kategori."}
       </p>
 

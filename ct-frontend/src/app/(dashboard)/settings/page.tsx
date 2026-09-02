@@ -291,8 +291,8 @@ export default function SettingsPage() {
               <CardHeader className="border-b bg-muted/20">
                 <CardTitle className="text-lg font-bold">Anggota Keluarga</CardTitle>
                 <CardDescription>
-                  Pencatatan kamu sudah aktif. Tambah nomor istri/anak agar mereka
-                  menulis ke Google Sheet yang sama (add-on, maks 5).
+                  Pencatatan kamu sudah aktif. Tambah nomor keluarga agar mereka
+                  bisa mencatat ke Google Sheet yang sama (add-on, maks 5).
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -307,7 +307,7 @@ export default function SettingsPage() {
               <CardHeader className="border-b bg-muted/20">
                 <CardTitle className="text-lg font-bold">Kategori</CardTitle>
                 <CardDescription>
-                Tambah atau silang kategori.
+                Tambah atau hapus kategori.
                 </CardDescription>
               </CardHeader>
               <CardContent>
